@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=None, extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     bot_token: str = Field(default="", alias="BOT_TOKEN")
     bot_mode: str = Field(default="polling", alias="BOT_MODE")
@@ -25,7 +25,17 @@ class Settings(BaseSettings):
 
     price_refresh_interval_seconds: int = Field(default=45, alias="PRICE_REFRESH_INTERVAL_SECONDS")
     provider_timeout_seconds: int = Field(default=10, alias="PROVIDER_TIMEOUT_SECONDS")
+    provider_max_attempts: int = Field(default=3, alias="PROVIDER_MAX_ATTEMPTS")
     notification_max_attempts: int = Field(default=5, alias="NOTIFICATION_MAX_ATTEMPTS")
+
+    reservoir_base_url: str = Field(default="https://api.reservoir.tools", alias="RESERVOIR_BASE_URL")
+    reservoir_api_key: str = Field(default="", alias="RESERVOIR_API_KEY")
+
+    nft_provider: str = Field(default="opensea", alias="NFT_PROVIDER")
+    nft_providers: str = Field(default="opensea,reservoir", alias="NFT_PROVIDERS")
+    opensea_base_url: str = Field(default="https://api.opensea.io", alias="OPENSEA_BASE_URL")
+    opensea_api_key: str = Field(default="", alias="OPENSEA_API_KEY")
+    opensea_chain: str = Field(default="ethereum", alias="OPENSEA_CHAIN")
 
 
 @lru_cache

@@ -30,3 +30,14 @@ uv run price-alert-worker
 
 Alerts are grouped by watched asset. The worker refreshes each active asset once per interval,
 stores the snapshot, evaluates all active alerts for that asset, and queues Telegram notifications.
+
+NFT collection floors are provider-backed. Use `NFT_PROVIDERS=opensea,reservoir` for fallback,
+or `NFT_PROVIDER=opensea` / `NFT_PROVIDER=reservoir` if you want exactly one provider.
+
+## Bot commands
+
+- `/alert BTC 10%` - create a quick alert.
+- `/newalert` - create an alert with inline keyboards.
+- `/alerts` - list active alerts with delete buttons.
+- `/deletealert 123` - delete an active alert by ID.
+- `/cancel` - cancel the current alert wizard.

@@ -151,7 +151,7 @@ async def upsert_asset_from_candidate(session: AsyncSession, candidate) -> Asset
                 "symbol": candidate.symbol.upper(),
                 "name": candidate.name,
                 "contract_address": candidate.contract_address,
-                "extra": candidate.metadata,
+                Asset.extra: candidate.metadata,
                 "updated_at": func.now(),
             },
         )
@@ -231,6 +231,38 @@ async def create_alert(
     session.add(alert)
     await session.flush()
     return alert
+
+
+async def active_alerts_for_user(session: AsyncSession, telegram_id: int) -> Sequence[Alert]:
+    result = await session.scalars(
+        select(Alert)
+        .join(User)
+        .options(selectinload(Alert.asset).selectinload(Asset.links))
+        .where(
+            User.telegram_id == telegram_id,
+            Alert.status == AlertStatus.ACTIVE.value,
+        )
+        .order_by(Alert.created_at.desc())
+    )
+    return result.all()
+
+
+async def delete_active_alert_for_user(session: AsyncSession, *, telegram_id: int, alert_id: int) -> bool:
+    alert = await session.scalar(
+        select(Alert)
+        .join(User)
+        .where(
+            Alert.id == alert_id,
+            User.telegram_id == telegram_id,
+            Alert.status == AlertStatus.ACTIVE.value,
+        )
+    )
+    if alert is None:
+        return False
+
+    alert.status = AlertStatus.DELETED.value
+    await session.flush()
+    return True
 
 
 async def active_alerts_for_asset(session: AsyncSession, asset_id: int) -> Sequence[Alert]:

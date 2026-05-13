@@ -8,14 +8,17 @@ from aiogram.fsm.storage.redis import RedisStorage
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
 
-from app.bot.handlers import router
+from app.bot.handlers import setup_handlers
+from app.bot.middlewares import DbSessionMiddleware
 from app.core.config import settings
+from app.db.session import SessionLocal
 
 
 def build_dispatcher() -> Dispatcher:
     storage = RedisStorage.from_url(settings.redis_url)
     dispatcher = Dispatcher(storage=storage)
-    dispatcher.include_router(router)
+    dispatcher.update.middleware(DbSessionMiddleware(SessionLocal))
+    dispatcher.include_router(setup_handlers())
     return dispatcher
 
 

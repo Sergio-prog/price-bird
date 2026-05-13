@@ -25,6 +25,7 @@ class DexScreenerProvider:
         candidates: list[AssetCandidate] = []
         for pair in payload.get("pairs") or []:
             base = pair.get("baseToken") or {}
+            quote = pair.get("quoteToken") or {}
             address = base.get("address")
             chain = pair.get("chainId")
             symbol = base.get("symbol")
@@ -40,7 +41,12 @@ class DexScreenerProvider:
                     symbol=symbol,
                     name=base.get("name"),
                     contract_address=address,
-                    metadata={"pair_address": pair.get("pairAddress"), "dex_id": pair.get("dexId")},
+                    metadata={
+                        "pair_address": pair.get("pairAddress"),
+                        "dex_id": pair.get("dexId"),
+                        "pair": _format_pair(base.get("symbol"), quote.get("symbol")),
+                        "price_usd": _format_price(pair.get("priceUsd")),
+                    },
                     links={"dexscreener": pair.get("url")} if pair.get("url") else {},
                 )
             )
@@ -72,3 +78,21 @@ def _normalize_chain(chain: str) -> str:
         "unichain": "unichain",
     }
     return mapping.get(chain.lower(), chain.lower())
+
+
+def _format_pair(base_symbol: str | None, quote_symbol: str | None) -> str | None:
+    if not base_symbol or not quote_symbol:
+        return None
+    return f"{base_symbol}/{quote_symbol}"
+
+
+def _format_price(value: object) -> str | None:
+    if value in (None, ""):
+        return None
+    try:
+        price = Decimal(str(value))
+    except Exception:
+        return None
+    if price >= Decimal("1"):
+        return f"{price.normalize():f}"
+    return f"{price:.8f}".rstrip("0").rstrip(".")
