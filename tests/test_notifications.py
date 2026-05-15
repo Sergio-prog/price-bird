@@ -29,5 +29,9 @@ def test_render_alert_message_shows_nft_native_and_usd_floor() -> None:
 
     message = render_alert_message(event)
 
+    assert "Alert triggered for <b>BAYC</b>" in message
+    assert "Direction: Up" in message
     assert "Current: 1.2 ETH ($3600)" in message
+    assert "Change: +12.50%" in message
     assert "Source: opensea" in message
+    assert '<a href="https://www.tradingview.com/search/?query=BAYC">TradingView</a>' in message

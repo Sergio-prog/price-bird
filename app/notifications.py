@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from decimal import Decimal
+from html import escape
 
 from aiogram import Bot
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.alerts.formatting import format_decimal, format_direction, format_percent
 from app.alerts.links import build_asset_links, format_links
 from app.core.config import settings
 from app.db.enums import AssetType, NotificationStatus
@@ -17,19 +18,18 @@ def render_alert_message(event: AlertEvent) -> str:
     alert = event.alert
     asset = alert.asset
     snapshot = event.snapshot
-    direction_icon = "UP" if event.direction == "up" else "DOWN"
     links = format_links(build_asset_links(asset))
     current = _format_current_price(event)
     body = [
-        f"Price alert triggered: {asset.symbol}",
-        f"Direction: {direction_icon}",
+        f"Alert triggered for <b>{escape(asset.symbol)}</b>",
+        f"Direction: {format_direction(event.direction)}",
         f"Current: {current}",
-        f"Baseline: ${_format_decimal(alert.baseline_price)}",
-        f"Change: {_format_decimal(event.percent_change)}%",
-        f"Source: {snapshot.source}",
+        f"Baseline: ${format_decimal(alert.baseline_price)}",
+        f"Change: {format_percent(event.percent_change, signed=True)}",
+        f"Source: {escape(snapshot.source)}",
     ]
     if links:
-        body.extend(["", links])
+        body.append(f"Links: {links}")
     return "\n".join(body)
 
 
@@ -41,18 +41,20 @@ def _format_current_price(event: AlertEvent) -> str:
         and snapshot.price_native is not None
         and snapshot.native_symbol is not None
     ):
-        return f"{_format_decimal(snapshot.price_native)} {snapshot.native_symbol} (${_format_decimal(snapshot.price_usd)})"
-    return f"${_format_decimal(snapshot.price_usd)}"
-
-
-def _format_decimal(value: Decimal) -> str:
-    text = format(value.normalize(), "f")
-    return text.rstrip("0").rstrip(".") if "." in text else text
+        native_price = format_decimal(snapshot.price_native)
+        usd_price = format_decimal(snapshot.price_usd)
+        return f"{native_price} {escape(snapshot.native_symbol)} (${usd_price})"
+    return f"${format_decimal(snapshot.price_usd)}"
 
 
 async def send_alert_notification(session: AsyncSession, bot: Bot, event: AlertEvent) -> None:
     try:
-        await bot.send_message(event.alert.user.telegram_id, render_alert_message(event), disable_web_page_preview=True)
+        await bot.send_message(
+            event.alert.user.telegram_id,
+            render_alert_message(event),
+            disable_web_page_preview=True,
+            parse_mode="HTML",
+        )
     except Exception:
         attempts = event.notification_attempts + 1
         status = (

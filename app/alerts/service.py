@@ -5,9 +5,10 @@ from decimal import Decimal
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.alerts.evaluator import evaluate_alert
+from app.alerts.formatting import format_decimal, format_percent
 from app.alerts.parser import ParsedAlertCommand
 from app.db import repositories as repo
-from app.db.enums import AssetType
+from app.db.enums import AlertType, AssetType
 from app.db.models import Alert, Asset
 from app.providers.registry import provider_registry
 
@@ -63,19 +64,24 @@ async def refresh_and_evaluate_asset(session: AsyncSession, asset: Asset) -> lis
             direction=result.direction.value,
             percent_change=result.percent_change.quantize(Decimal("0.0001")),
         )
-        await repo.mark_alert_triggered(session, alert.id)
+        if _is_one_shot_alert(alert):
+            await repo.mark_alert_triggered(session, alert.id)
         event_ids.append(event.id)
     return event_ids
+
+
+def _is_one_shot_alert(alert: Alert) -> bool:
+    return alert.type in {AlertType.PRICE_ABOVE.value, AlertType.PRICE_BELOW.value, AlertType.ABSOLUTE_CHANGE.value}
 
 
 def describe_alert(alert: Alert) -> str:
     symbol = alert.asset.symbol if alert.asset else "asset"
     if alert.type == "percent_change":
-        return f"{symbol} +/-{alert.threshold_value.normalize()}%"
+        return f"{symbol} moves {format_percent(alert.threshold_value)} up or down"
     if alert.type == "price_above":
-        return f"{symbol} above ${alert.threshold_value.normalize()}"
+        return f"{symbol} above ${format_decimal(alert.threshold_value)}"
     if alert.type == "price_below":
-        return f"{symbol} below ${alert.threshold_value.normalize()}"
+        return f"{symbol} below ${format_decimal(alert.threshold_value)}"
     return f"{symbol} alert"
 
 

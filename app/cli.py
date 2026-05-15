@@ -3,12 +3,40 @@ from __future__ import annotations
 import asyncio
 
 import typer
+from aiogram import Bot
 
+from app.bot.commands import bot_commands
+from app.core.config import settings
 from app.db import repositories as repo
 from app.db.enums import AccessStatus, UserRole
 from app.db.session import SessionLocal
 
 app = typer.Typer(help="Price alert bot admin CLI.")
+
+
+@app.callback(invoke_without_command=True)
+def main(ctx: typer.Context) -> None:
+    if ctx.invoked_subcommand is None:
+        typer.echo(ctx.get_help())
+        raise typer.Exit()
+
+
+@app.command()
+def sync_commands(include_admin: bool = typer.Option(False, help="Include admin-only bot commands.")) -> None:
+    async def run() -> None:
+        if not settings.bot_token:
+            raise typer.BadParameter("BOT_TOKEN is required")
+
+        bot = Bot(settings.bot_token)
+        try:
+            commands = bot_commands(include_admin=include_admin)
+            await bot.set_my_commands(commands)
+        finally:
+            await bot.session.close()
+
+        typer.echo(f"Synced {len(commands)} bot commands.")
+
+    asyncio.run(run())
 
 
 @app.command()
@@ -57,3 +85,7 @@ def suspend(telegram_id: int = typer.Option(..., help="Telegram numeric user ID.
         typer.echo(f"User suspended: {user.telegram_id}")
 
     asyncio.run(run())
+
+
+if __name__ == "__main__":
+    app(prog_name="uv run app/cli.py")

@@ -4,6 +4,7 @@ from aiogram.fsm.state import State, StatesGroup
 
 
 class AlertWizard(StatesGroup):
+    waiting_asset_type = State()
     waiting_query = State()
     waiting_asset = State()
     waiting_type = State()

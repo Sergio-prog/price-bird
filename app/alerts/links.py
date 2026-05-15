@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from html import escape
 from urllib.parse import quote_plus
 
 from app.db.models import Asset
@@ -24,4 +25,16 @@ def build_asset_links(asset: Asset) -> dict[str, str]:
 def format_links(links: dict[str, str]) -> str:
     if not links:
         return ""
-    return "\n".join(f"{label.title()}: {url}" for label, url in links.items())
+    return " | ".join(f'<a href="{escape(url, quote=True)}">{escape(_link_label(label))}</a>' for label, url in links.items())
+
+
+def _link_label(label: str) -> str:
+    labels = {
+        "axiom": "Axiom",
+        "dexscreener": "DexScreener",
+        "opensea": "OpenSea",
+        "reservoir": "Reservoir",
+        "tradingview": "TradingView",
+        "website": "Website",
+    }
+    return labels.get(label, label.replace("_", " ").title())

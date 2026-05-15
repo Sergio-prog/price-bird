@@ -9,9 +9,19 @@ from app.providers.base import AssetCandidate
 def start_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="New alert", callback_data="menu:newalert")],
-            [InlineKeyboardButton(text="My alerts", callback_data="menu:alerts")],
-            [InlineKeyboardButton(text="Examples", callback_data="menu:examples")],
+            [InlineKeyboardButton(text="🔔 New alert", callback_data="menu:newalert")],
+            [InlineKeyboardButton(text="📌 Active alerts", callback_data="menu:alerts")],
+            [InlineKeyboardButton(text="📚 Examples", callback_data="menu:examples")],
+        ]
+    )
+
+
+def asset_type_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🪙 Coins / CEX", callback_data="asset_type:token")],
+            [InlineKeyboardButton(text="🖼 NFT floor", callback_data="asset_type:nft")],
+            [InlineKeyboardButton(text="↩ Back to menu", callback_data="wizard:cancel")],
         ]
     )
 
@@ -27,17 +37,35 @@ def asset_candidates_keyboard(candidates: list[AssetCandidate]) -> InlineKeyboar
                 )
             ]
         )
-    rows.append([InlineKeyboardButton(text="Cancel", callback_data="wizard:cancel")])
+    rows.append([InlineKeyboardButton(text="↩ Back to menu", callback_data="wizard:cancel")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def alert_type_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="+/- percent", callback_data="alert_type:percent")],
-            [InlineKeyboardButton(text="Above price", callback_data="alert_type:above")],
-            [InlineKeyboardButton(text="Below price", callback_data="alert_type:below")],
-            [InlineKeyboardButton(text="Cancel", callback_data="wizard:cancel")],
+            [InlineKeyboardButton(text="📈 Move % up/down", callback_data="alert_type:percent")],
+            [InlineKeyboardButton(text="🚀 Breaks above", callback_data="alert_type:above")],
+            [InlineKeyboardButton(text="🩸 Drops below", callback_data="alert_type:below")],
+            [InlineKeyboardButton(text="↩ Back to menu", callback_data="wizard:cancel")],
+        ]
+    )
+
+
+def threshold_keyboard(alert_type: str) -> InlineKeyboardMarkup:
+    rows = []
+    if alert_type == "percent":
+        rows.append([InlineKeyboardButton(text="Default (10.00%)", callback_data="threshold:default_percent")])
+    rows.append([InlineKeyboardButton(text="↩ Back to menu", callback_data="wizard:cancel")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def alert_created_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="➕ Add another", callback_data="menu:newalert")],
+            [InlineKeyboardButton(text="📌 Active alerts", callback_data="menu:alerts")],
+            [InlineKeyboardButton(text="🏠 Menu", callback_data="wizard:cancel")],
         ]
     )
 

@@ -19,6 +19,7 @@ def build_dispatcher() -> Dispatcher:
     dispatcher = Dispatcher(storage=storage)
     dispatcher.update.middleware(DbSessionMiddleware(SessionLocal))
     dispatcher.include_router(setup_handlers())
+    
     return dispatcher
 
 
@@ -41,8 +42,10 @@ async def run_webhook() -> None:
         path=settings.webhook_path,
     )
     setup_application(app, dispatcher, bot=bot)
+
     runner = web.AppRunner(app)
     await runner.setup()
+
     site = web.TCPSite(runner, settings.web_server_host, settings.web_server_port)
     await site.start()
     await asyncio.Event().wait()

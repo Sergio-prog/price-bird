@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from html import escape
 
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.alerts.formatting import format_decimal, format_percent
 from app.alerts.parser import ParsedAlertCommand
 from app.alerts.service import asset_kind_label, create_alert_from_command
+from app.bot.keyboards import alert_created_keyboard
 from app.db import repositories as repo
 from app.db.enums import AlertDirection, AlertType, AssetType
 from app.providers.base import AssetCandidate
@@ -55,7 +58,17 @@ async def create_alert_from_candidate(
     await session.commit()
     await _send_result(
         message,
-        f"Alert created: {asset.symbol} ({asset_kind_label(asset)}) at baseline ${alert.baseline_price.normalize()}.",
+        "\n".join(
+            [
+                f"✅ <b>{escape(asset.symbol)}</b> is now on your watchlist.",
+                "",
+                f"Trigger: {_format_condition(parsed)}",
+                f"Baseline: ${format_decimal(alert.baseline_price)}",
+                f"Market: {asset_kind_label(asset)}",
+            ]
+        ),
+        reply_markup=alert_created_keyboard(),
+        parse_mode="HTML",
         edit_message=edit_message,
         edit_chat_id=edit_chat_id,
         edit_message_id=edit_message_id,
@@ -132,14 +145,32 @@ async def _send_result(
     message: Message,
     text: str,
     *,
+    reply_markup=None,
+    parse_mode: str | None = None,
     edit_message: bool,
     edit_chat_id: int | None,
     edit_message_id: int | None,
 ) -> None:
     if edit_chat_id is not None and edit_message_id is not None:
-        await message.bot.edit_message_text(text=text, chat_id=edit_chat_id, message_id=edit_message_id)
+        await message.bot.edit_message_text(
+            text=text,
+            chat_id=edit_chat_id,
+            message_id=edit_message_id,
+            reply_markup=reply_markup,
+            parse_mode=parse_mode,
+        )
         return
     if edit_message:
-        await message.edit_text(text)
+        await message.edit_text(text, reply_markup=reply_markup, parse_mode=parse_mode)
         return
-    await message.answer(text)
+    await message.answer(text, reply_markup=reply_markup, parse_mode=parse_mode)
+
+
+def _format_condition(parsed: ParsedAlertCommand) -> str:
+    if parsed.alert_type == AlertType.PERCENT_CHANGE:
+        return f"Moves {format_percent(parsed.threshold_value)} up or down"
+    if parsed.alert_type == AlertType.PRICE_ABOVE:
+        return f"Price goes above ${format_decimal(parsed.threshold_value)}"
+    if parsed.alert_type == AlertType.PRICE_BELOW:
+        return f"Price goes below ${format_decimal(parsed.threshold_value)}"
+    return "Price alert"
