@@ -34,9 +34,8 @@ class ProviderRegistry:
 
 
 def _build_nft_providers() -> list[PriceProvider]:
-    provider_names = settings.nft_providers or settings.nft_provider
     providers: list[PriceProvider] = []
-    for provider in [name.strip().lower() for name in provider_names.split(",") if name.strip()]:
+    for provider in [name.strip().lower() for name in settings.nft_providers.split(",") if name.strip()]:
         if provider == "opensea":
             providers.append(OpenSeaNftProvider())
         elif provider == "reservoir":

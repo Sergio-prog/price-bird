@@ -8,8 +8,8 @@ import aiohttp
 from app.core.config import settings
 from app.db.models import Asset
 from app.providers.base import AssetCandidate, PriceQuote
-from app.providers.http import sleep_before_retry
 from app.providers.reservoir_mapping import candidate_from_collection, chain_name, floor_price
+from app.utils.http import sleep_before_retry
 
 
 class ReservoirNftProvider:

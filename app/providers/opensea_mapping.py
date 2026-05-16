@@ -6,7 +6,7 @@ from typing import Any
 from app.core.config import settings
 from app.db.enums import AssetType
 from app.providers.base import AssetCandidate
-from app.providers.parsing import to_decimal
+from app.utils.parsing import to_decimal
 
 
 def candidate_from_collection(collection: dict[str, Any], *, provider_name: str) -> AssetCandidate:

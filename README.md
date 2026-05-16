@@ -32,7 +32,7 @@ Alerts are grouped by watched asset. The worker refreshes each active asset once
 stores the snapshot, evaluates all active alerts for that asset, and queues Telegram notifications.
 
 NFT collection floors are provider-backed. Use `NFT_PROVIDERS=opensea,reservoir` for fallback,
-or `NFT_PROVIDER=opensea` / `NFT_PROVIDER=reservoir` if you want exactly one provider.
+or set a single value like `NFT_PROVIDERS=opensea` if you want exactly one provider.
 
 ## Bot commands
 

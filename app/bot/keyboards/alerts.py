@@ -26,6 +26,14 @@ def asset_type_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+def back_to_menu_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="↩ Back to menu", callback_data="wizard:cancel")],
+        ]
+    )
+
+
 def asset_candidates_keyboard(candidates: list[AssetCandidate]) -> InlineKeyboardMarkup:
     rows = []
     for index, candidate in enumerate(candidates[:10]):
@@ -71,11 +79,9 @@ def alert_created_keyboard() -> InlineKeyboardMarkup:
 
 
 def alert_list_keyboard(alerts: list[Alert]) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=f"Delete #{alert.id}", callback_data=f"alert_delete:{alert.id}")] for alert in alerts
-        ]
-    )
+    rows = [[InlineKeyboardButton(text=f"Delete #{alert.id}", callback_data=f"alert_delete:{alert.id}")] for alert in alerts]
+    rows.append([InlineKeyboardButton(text="↩ Back to menu", callback_data="wizard:cancel")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def _asset_candidate_label(candidate: AssetCandidate) -> str:

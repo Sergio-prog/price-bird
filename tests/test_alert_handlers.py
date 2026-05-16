@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.bot.handlers import alerts as alert_handlers
-from app.bot.messages import no_matches_message, start_message
+from app.bot.messages import examples_message, no_matches_message, start_message
 
 
 class FakeMessage:
@@ -12,10 +12,14 @@ class FakeMessage:
         self.from_user = SimpleNamespace(id=user_id, first_name="Fotex", username="fotex_24")
         self.chat = SimpleNamespace(id=999)
         self.answers: list[tuple[str, object | None]] = []
+        self.deleted = False
 
     async def answer(self, text: str, reply_markup=None, **kwargs) -> None:
         self.answers.append((text, reply_markup))
         return SimpleNamespace(chat=self.chat, message_id=len(self.answers))
+
+    async def delete(self) -> None:
+        self.deleted = True
 
 
 class FakeState:
@@ -90,6 +94,22 @@ async def test_delete_alert_command_deletes_user_alert(monkeypatch: pytest.Monke
 
 
 @pytest.mark.asyncio
+async def test_examples_command_replaces_previous_message(monkeypatch: pytest.MonkeyPatch) -> None:
+    message = FakeMessage(text="/examples")
+
+    async def fake_ensure_access(message, session) -> bool:
+        return True
+
+    monkeypatch.setattr(alert_handlers, "ensure_access", fake_ensure_access)
+
+    await alert_handlers.examples_command(message, object())
+
+    assert message.deleted is True
+    assert message.answers[0][0] == examples_message()
+    assert message.answers[0][1].inline_keyboard[0][0].callback_data == "wizard:cancel"
+
+
+@pytest.mark.asyncio
 async def test_wizard_query_uses_selected_nft_asset_type(monkeypatch: pytest.MonkeyPatch) -> None:
     message = FakeMessage(text="milady")
     state = FakeState(data={"asset_nft": True})
@@ -109,6 +129,7 @@ async def test_wizard_query_uses_selected_nft_asset_type(monkeypatch: pytest.Mon
     await alert_handlers.wizard_query(message, state, object())
 
     assert calls == {"query": "milady", "nft": True}
-    assert message.answers == [(no_matches_message(nft=True), None)]
+    assert message.answers[0][0] == no_matches_message(nft=True)
+    assert message.answers[0][1].inline_keyboard[0][0].callback_data == "wizard:cancel"
     assert state.data["wizard_chat_id"] == 999
     assert state.data["wizard_message_id"] == 1

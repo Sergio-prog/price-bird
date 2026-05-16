@@ -24,11 +24,13 @@ from app.bot.keyboards import (
     alert_type_keyboard,
     asset_candidates_keyboard,
     asset_type_keyboard,
+    back_to_menu_keyboard,
     start_menu_keyboard,
     threshold_keyboard,
 )
 from app.bot.messages import (
     asset_type_prompt,
+    examples_message,
     no_matches_message,
     provider_failed_message,
     query_prompt,
@@ -79,22 +81,15 @@ async def examples_menu(callback: CallbackQuery, session: AsyncSession) -> None:
     if not await _ensure_callback_access(callback, session):
         return
     if isinstance(callback.message, Message):
-        await callback.message.edit_text(
-            "\n".join(
-                [
-                    "<b>Fast examples</b>",
-                    "",
-                    "<code>/alert BTC 10%</code>",
-                    "<code>/alert ETH above 4000</code>",
-                    "<code>/alert SOL below 120</code>",
-                    "",
-                    "For NFT floors use <code>/newalert</code> and choose NFT floor first.",
-                ]
-            ),
-            reply_markup=start_menu_keyboard(),
-            parse_mode="HTML",
-        )
+        await _replace_with_examples(callback.message)
     await callback.answer()
+
+
+@router.message(Command("examples"))
+async def examples_command(message: Message, session: AsyncSession) -> None:
+    if not await ensure_access(message, session):
+        return
+    await _replace_with_examples(message)
 
 
 @router.message(Command("alerts"))
@@ -161,7 +156,7 @@ async def wizard_asset_type(callback: CallbackQuery, state: FSMContext) -> None:
         await state.update_data(wizard_chat_id=callback.message.chat.id, wizard_message_id=callback.message.message_id)
         await callback.message.edit_text(
             query_prompt(nft=nft),
-            reply_markup=None,
+            reply_markup=back_to_menu_keyboard(),
             parse_mode="HTML",
         )
     await callback.answer()
@@ -210,10 +205,10 @@ async def wizard_query(message: Message, state: FSMContext, session: AsyncSessio
         candidates = await provider_registry.search_assets(query, nft=nft)
     except Exception:
         logger.exception("Asset provider search failed; query=%s nft=%s shortcut=false", query, nft)
-        await _send_wizard_message(message, state, provider_failed_message(nft=nft))
+        await _send_wizard_message(message, state, provider_failed_message(nft=nft), reply_markup=back_to_menu_keyboard())
         return
     if not candidates:
-        await _send_wizard_message(message, state, no_matches_message(nft=nft))
+        await _send_wizard_message(message, state, no_matches_message(nft=nft), reply_markup=back_to_menu_keyboard())
         return
     await state.update_data(candidates=[candidate.__dict__ for candidate in candidates])
     await state.set_state(AlertWizard.waiting_asset)
@@ -321,10 +316,10 @@ async def wizard_threshold(message: Message, state: FSMContext, session: AsyncSe
     try:
         threshold = Decimal((message.text or "").strip().removesuffix("%"))
     except Exception:
-        await message.answer("Send a valid positive number.")
+        await message.answer("Send a valid positive number.", reply_markup=back_to_menu_keyboard())
         return
     if threshold <= 0:
-        await message.answer("Send a valid positive number.")
+        await message.answer("Send a valid positive number.", reply_markup=back_to_menu_keyboard())
         return
 
     parsed = _parsed_threshold(data["alert_type"], threshold)
@@ -371,6 +366,28 @@ async def _send_start_message(message: Message) -> None:
     await message.answer(
         start_message(message.from_user.first_name, message.from_user.username),
         reply_markup=start_menu_keyboard(),
+        parse_mode="HTML",
+        disable_web_page_preview=True,
+    )
+
+
+async def _replace_with_examples(message: Message) -> None:
+    try:
+        await message.delete()
+    except Exception:
+        try:
+            await message.edit_text(
+                examples_message(),
+                reply_markup=back_to_menu_keyboard(),
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
+            return
+        except Exception:
+            pass
+    await message.answer(
+        examples_message(),
+        reply_markup=back_to_menu_keyboard(),
         parse_mode="HTML",
         disable_web_page_preview=True,
     )

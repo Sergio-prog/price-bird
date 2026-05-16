@@ -17,6 +17,7 @@ BOT_COMMANDS: tuple[CommandSpec, ...] = (
     CommandSpec("help", "Show available commands"),
     CommandSpec("newalert", "Create an alert step by step"),
     CommandSpec("alert", "Create alert from text, e.g. BTC 10%"),
+    CommandSpec("examples", "Show alert examples"),
     CommandSpec("alerts", "Show active alerts"),
     CommandSpec("deletealert", "Delete alert by id"),
     CommandSpec("cancel", "Cancel current action"),

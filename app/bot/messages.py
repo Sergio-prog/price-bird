@@ -36,6 +36,29 @@ def help_message(commands: tuple[CommandSpec, ...]) -> str:
     return "\n".join(lines)
 
 
+def examples_message() -> str:
+    return "\n".join(
+        [
+            "<b>Examples</b>",
+            "",
+            "<b>Fast command</b>",
+            "<code>/alert BTC 10%</code>",
+            "<code>/alert ETH &gt; 4000</code>",
+            "<code>/alert SOL &lt; 120</code>",
+            "<code>/alert PEPE 15%</code>",
+            "<code>/alert BTC/USDT &lt; 90000</code>",
+            "",
+            "<b>NFT floors</b>",
+            "<code>/alert milady floor 10%</code>",
+            "<code>/alert pudgy penguins floor 15%</code>",
+            "<code>/alert boredapeyachtclub floor &lt; 8</code>",
+            "",
+            "<b>Step by step</b>",
+            "Use <code>/newalert</code> when search returns many matches or you want buttons.",
+        ]
+    )
+
+
 def asset_type_prompt() -> str:
     return "What market are we watching?"
 

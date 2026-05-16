@@ -4,6 +4,7 @@ from app.bot.keyboards import (
     alert_list_keyboard,
     asset_candidates_keyboard,
     asset_type_keyboard,
+    back_to_menu_keyboard,
     start_menu_keyboard,
     threshold_keyboard,
 )
@@ -36,6 +37,14 @@ def test_alert_list_keyboard_uses_delete_callbacks() -> None:
     assert keyboard.inline_keyboard[0][0].callback_data == "alert_delete:123"
     assert keyboard.inline_keyboard[1][0].text == "Delete #456"
     assert keyboard.inline_keyboard[1][0].callback_data == "alert_delete:456"
+    assert keyboard.inline_keyboard[2][0].callback_data == "wizard:cancel"
+
+
+def test_back_to_menu_keyboard_uses_cancel_callback() -> None:
+    keyboard = back_to_menu_keyboard()
+
+    assert keyboard.inline_keyboard[0][0].text == "↩ Back to menu"
+    assert keyboard.inline_keyboard[0][0].callback_data == "wizard:cancel"
 
 
 def test_threshold_keyboard_has_default_percent_and_back() -> None:

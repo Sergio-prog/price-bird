@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.providers.parsing import format_price
+from app.utils.parsing import format_price
 
 
 def normalize_chain(chain: str) -> str:
