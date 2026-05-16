@@ -46,6 +46,7 @@ async def run_webhook() -> None:
         path=settings.webhook_path,
     )
     setup_application(app, dispatcher, bot=bot)
+    app.add_routes([web.get("/", lambda x: web.Response(text="Hello, world"))])
 
     runner = web.AppRunner(app)
     await runner.setup()
