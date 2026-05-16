@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.db.enums import AssetType
 from app.db.models import Asset
 from app.providers.base import AssetCandidate, PriceQuote
+from app.providers.dexscreener_mapping import format_pair, format_price, normalize_chain
 
 
 class DexScreenerProvider:
@@ -37,15 +38,15 @@ class DexScreenerProvider:
                     type=AssetType.TOKEN,
                     provider=self.name,
                     provider_asset_id=provider_asset_id,
-                    chain=_normalize_chain(chain),
+                    chain=normalize_chain(chain),
                     symbol=symbol,
                     name=base.get("name"),
                     contract_address=address,
                     metadata={
                         "pair_address": pair.get("pairAddress"),
                         "dex_id": pair.get("dexId"),
-                        "pair": _format_pair(base.get("symbol"), quote.get("symbol")),
-                        "price_usd": _format_price(pair.get("priceUsd")),
+                        "pair": format_pair(base.get("symbol"), quote.get("symbol")),
+                        "price_usd": format_price(pair.get("priceUsd")),
                     },
                     links={"dexscreener": pair.get("url")} if pair.get("url") else {},
                 )
@@ -62,37 +63,4 @@ class DexScreenerProvider:
         if not pairs:
             raise LookupError(f"No DexScreener pair for {asset.symbol}")
         best = max(pairs, key=lambda pair: float((pair.get("liquidity") or {}).get("usd") or 0))
-        return PriceQuote(
-            price_usd=Decimal(str(best["priceUsd"])),
-            source=self.name,
-            raw=best,
-        )
-
-
-def _normalize_chain(chain: str) -> str:
-    mapping = {
-        "ethereum": "ethereum",
-        "solana": "solana",
-        "bsc": "bsc",
-        "arbitrum": "arbitrum",
-        "unichain": "unichain",
-    }
-    return mapping.get(chain.lower(), chain.lower())
-
-
-def _format_pair(base_symbol: str | None, quote_symbol: str | None) -> str | None:
-    if not base_symbol or not quote_symbol:
-        return None
-    return f"{base_symbol}/{quote_symbol}"
-
-
-def _format_price(value: object) -> str | None:
-    if value in (None, ""):
-        return None
-    try:
-        price = Decimal(str(value))
-    except Exception:
-        return None
-    if price >= Decimal("1"):
-        return f"{price.normalize():f}"
-    return f"{price:.8f}".rstrip("0").rstrip(".")
+        return PriceQuote(price_usd=Decimal(str(best["priceUsd"])), source=self.name, raw=best)
