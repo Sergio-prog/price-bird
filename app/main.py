@@ -13,17 +13,20 @@ from app.bot.middlewares import DbSessionMiddleware
 from app.core.config import settings
 from app.db.session import SessionLocal
 
+logger = logging.getLogger(__name__)
+
 
 def build_dispatcher() -> Dispatcher:
     storage = RedisStorage.from_url(settings.redis_url)
     dispatcher = Dispatcher(storage=storage)
     dispatcher.update.middleware(DbSessionMiddleware(SessionLocal))
     dispatcher.include_router(setup_handlers())
-    
+
     return dispatcher
 
 
 async def run_polling() -> None:
+    logger.info("Starting bot in polling mode")
     bot = Bot(settings.bot_token)
     dispatcher = build_dispatcher()
     await bot.delete_webhook(drop_pending_updates=True)
@@ -31,6 +34,7 @@ async def run_polling() -> None:
 
 
 async def run_webhook() -> None:
+    logger.info("Starting bot in webhook mode")
     bot = Bot(settings.bot_token)
     dispatcher = build_dispatcher()
     webhook_url = f"{settings.webhook_base_url.rstrip('/')}{settings.webhook_path}"
@@ -48,6 +52,12 @@ async def run_webhook() -> None:
 
     site = web.TCPSite(runner, settings.web_server_host, settings.web_server_port)
     await site.start()
+    logger.info(
+        "Webhook server started; host=%s port=%s path=%s",
+        settings.web_server_host,
+        settings.web_server_port,
+        settings.webhook_path,
+    )
     await asyncio.Event().wait()
 
 
