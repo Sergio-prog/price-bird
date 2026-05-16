@@ -81,7 +81,7 @@ async def examples_menu(callback: CallbackQuery, session: AsyncSession) -> None:
     if not await _ensure_callback_access(callback, session):
         return
     if isinstance(callback.message, Message):
-        await _replace_with_examples(callback.message)
+        await _show_examples_then_menu(callback.message, edit_previous=True)
     await callback.answer()
 
 
@@ -89,7 +89,7 @@ async def examples_menu(callback: CallbackQuery, session: AsyncSession) -> None:
 async def examples_command(message: Message, session: AsyncSession) -> None:
     if not await ensure_access(message, session):
         return
-    await _replace_with_examples(message)
+    await _show_examples_then_menu(message, edit_previous=False)
 
 
 @router.message(Command("alerts"))
@@ -371,23 +371,36 @@ async def _send_start_message(message: Message) -> None:
     )
 
 
-async def _replace_with_examples(message: Message) -> None:
-    try:
-        await message.delete()
-    except Exception:
+async def _show_examples_then_menu(message: Message, *, edit_previous: bool) -> None:
+    if edit_previous:
         try:
             await message.edit_text(
                 examples_message(),
-                reply_markup=back_to_menu_keyboard(),
                 parse_mode="HTML",
                 disable_web_page_preview=True,
             )
-            return
+        except Exception:
+            await message.answer(
+                examples_message(),
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
+    else:
+        try:
+            await message.delete()
         except Exception:
             pass
+        await message.answer(
+            examples_message(),
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+        )
+
+    if message.from_user is None:
+        return
     await message.answer(
-        examples_message(),
-        reply_markup=back_to_menu_keyboard(),
+        start_message(message.from_user.first_name, message.from_user.username),
+        reply_markup=start_menu_keyboard(),
         parse_mode="HTML",
         disable_web_page_preview=True,
     )

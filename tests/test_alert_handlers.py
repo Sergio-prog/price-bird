@@ -106,7 +106,9 @@ async def test_examples_command_replaces_previous_message(monkeypatch: pytest.Mo
 
     assert message.deleted is True
     assert message.answers[0][0] == examples_message()
-    assert message.answers[0][1].inline_keyboard[0][0].callback_data == "wizard:cancel"
+    assert message.answers[0][1] is None
+    assert message.answers[1][0] == start_message("Fotex", "fotex_24")
+    assert message.answers[1][1].inline_keyboard[0][0].callback_data == "menu:newalert"
 
 
 @pytest.mark.asyncio

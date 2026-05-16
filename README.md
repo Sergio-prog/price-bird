@@ -26,6 +26,26 @@ uv run price-alert-bot
 uv run price-alert-worker
 ```
 
+## Docker Compose deploy
+
+1. Copy `.env.example` to `.env` and fill production values.
+2. Use strong `POSTGRES_PASSWORD`, `BOT_TOKEN`, and provider API keys.
+3. Start the stack:
+
+```bash
+docker compose up -d --build
+```
+
+Compose builds one app image and runs three app services:
+
+- `migrate` runs `alembic upgrade head` once before the app starts.
+- `bot` runs the Telegram bot.
+- `worker` refreshes prices and sends notifications.
+
+Inside Compose, `DATABASE_URL` and `REDIS_URL` are set to the internal `postgres` and `redis` service names.
+The `.env` file is still loaded for bot/provider settings and database credentials.
+Postgres, Redis, and the webhook port bind to `127.0.0.1` by default; put a reverse proxy in front of the bot for webhook mode.
+
 ## Core idea
 
 Alerts are grouped by watched asset. The worker refreshes each active asset once per interval,
