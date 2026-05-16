@@ -6,8 +6,8 @@ x-app-environment: &app-environment
   WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
   WEB_SERVER_HOST: ${WEB_SERVER_HOST:-0.0.0.0}
   WEB_SERVER_PORT: ${WEB_SERVER_PORT:-8080}
-  DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-price_alerts}:${POSTGRES_PASSWORD:-price_alerts}@postgres:5432/${POSTGRES_DB:-price_alerts}
-  REDIS_URL: redis://redis:6379/0
+  DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+  REDIS_URL: ${REDIS_URL:?REDIS_URL is required}
   PRICE_REFRESH_INTERVAL_SECONDS: ${PRICE_REFRESH_INTERVAL_SECONDS:-45}
   PROVIDER_TIMEOUT_SECONDS: ${PROVIDER_TIMEOUT_SECONDS:-10}
   PROVIDER_MAX_ATTEMPTS: ${PROVIDER_MAX_ATTEMPTS:-3}
@@ -27,10 +27,6 @@ services:
       <<: *app-environment
     command: uv run price-alert-bot
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
       migrate:
         condition: service_completed_successfully
     ports:
@@ -43,10 +39,6 @@ services:
       <<: *app-environment
     command: uv run price-alert-worker
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
       migrate:
         condition: service_completed_successfully
 
@@ -56,13 +48,12 @@ services:
     environment:
       <<: *app-environment
     command: uv run alembic upgrade head
-    depends_on:
-      postgres:
-        condition: service_healthy
 
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    profiles:
+      - infra
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-price_alerts}
       POSTGRES_USER: ${POSTGRES_USER:-price_alerts}
@@ -80,6 +71,8 @@ services:
   redis:
     image: redis:8-alpine
     restart: unless-stopped
+    profiles:
+      - infra
     ports:
       - "${REDIS_BIND:-127.0.0.1}:${REDIS_PORT:-6379}:6379"
     volumes:

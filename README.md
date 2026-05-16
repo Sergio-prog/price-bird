@@ -42,9 +42,15 @@ Compose builds one app image and runs three app services:
 - `bot` runs the Telegram bot.
 - `worker` refreshes prices and sends notifications.
 
-Inside Compose, `DATABASE_URL` and `REDIS_URL` are set to the internal `postgres` and `redis` service names.
-The `.env` file is still loaded for bot/provider settings and database credentials.
-Postgres, Redis, and the webhook port bind to `127.0.0.1` by default; put a reverse proxy in front of the bot for webhook mode.
+Set `DATABASE_URL` and `REDIS_URL` in `.env` to your production Postgres and Redis endpoints.
+The Compose file includes optional Postgres and Redis services under the `infra` profile, but app services do not depend on them.
+The webhook port binds to `127.0.0.1` by default; put a reverse proxy in front of the bot for webhook mode.
+
+To run bundled infra on the same server:
+
+```bash
+docker compose --profile infra up -d --build
+```
 
 ## Core idea
 
