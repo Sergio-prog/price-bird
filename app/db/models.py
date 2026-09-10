@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     DateTime,
     ForeignKey,
     Index,
@@ -30,9 +31,7 @@ from app.db.enums import (
 
 class TimestampMixin:
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
 class User(Base, TimestampMixin):
@@ -40,6 +39,7 @@ class User(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
+    bird_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     username: Mapped[str | None] = mapped_column(String(255))
     first_name: Mapped[str | None] = mapped_column(String(255))
     last_name: Mapped[str | None] = mapped_column(String(255))
@@ -103,8 +103,8 @@ class PriceSnapshot(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"), index=True)
-    price_usd: Mapped[Decimal] = mapped_column(Numeric(28, 10))
-    price_native: Mapped[Decimal | None] = mapped_column(Numeric(28, 10))
+    price_usd: Mapped[Decimal] = mapped_column(Numeric(78, 36))
+    price_native: Mapped[Decimal | None] = mapped_column(Numeric(78, 36))
     native_symbol: Mapped[str | None] = mapped_column(String(32))
     source: Mapped[str] = mapped_column(String(64))
     raw: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
@@ -122,11 +122,17 @@ class Alert(Base):
     asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"), index=True)
     type: Mapped[str] = mapped_column(String(32))
     status: Mapped[str] = mapped_column(String(32), default=AlertStatus.ACTIVE.value, server_default=AlertStatus.ACTIVE.value)
-    baseline_price: Mapped[Decimal] = mapped_column(Numeric(28, 10))
-    threshold_value: Mapped[Decimal] = mapped_column(Numeric(28, 10))
+    baseline_price: Mapped[Decimal] = mapped_column(Numeric(78, 36))
+    threshold_value: Mapped[Decimal] = mapped_column(Numeric(78, 36))
     direction: Mapped[str] = mapped_column(String(32), default=AlertDirection.BOTH.value)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     triggered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    repeat: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    armed: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    cooldown_seconds: Mapped[int] = mapped_column(default=900, server_default="900")
+    last_triggered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    note: Mapped[str | None] = mapped_column(String(300))
 
     user: Mapped[User] = relationship(back_populates="alerts")
     asset: Mapped[Asset] = relationship(back_populates="alerts")
@@ -150,3 +156,59 @@ class AlertEvent(Base):
 
     alert: Mapped[Alert] = relationship(back_populates="events")
     snapshot: Mapped[PriceSnapshot] = relationship()
+
+
+class ConnectedApp(Base, TimestampMixin):
+    __tablename__ = "connected_apps"
+    __table_args__ = (UniqueConstraint("user_id", "integration_definition_id", name="uq_connected_apps_user_integration"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    integration_definition_id: Mapped[str | None] = mapped_column(ForeignKey("integration_definitions.id"), index=True)
+    name: Mapped[str] = mapped_column(String(80))
+    kind: Mapped[str] = mapped_column(String(32))
+    url: Mapped[str | None] = mapped_column(Text)
+    secret_encrypted: Mapped[str | None] = mapped_column(Text)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    deleted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    secret_version: Mapped[int] = mapped_column(default=1, server_default="1")
+
+    integration_definition: Mapped[IntegrationDefinition | None] = relationship(back_populates="connections", lazy="raise")
+
+
+class IntegrationDefinition(Base, TimestampMixin):
+    __tablename__ = "integration_definitions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    slug: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(80))
+    base_url: Mapped[str] = mapped_column(Text)
+    webhook_path: Mapped[str] = mapped_column(String(255))
+    secret_encrypted: Mapped[str] = mapped_column(Text)
+    secret_version: Mapped[int] = mapped_column(default=1, server_default="1")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+
+    connections: Mapped[list[ConnectedApp]] = relationship(back_populates="integration_definition")
+
+
+class Delivery(Base):
+    __tablename__ = "deliveries"
+    __table_args__ = (
+        UniqueConstraint("event_id", "destination", name="uq_delivery_event_destination"),
+        Index("ix_delivery_due", "status", "next_attempt_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    event_id: Mapped[int | None] = mapped_column(ForeignKey("alert_events.id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    connection_id: Mapped[str | None] = mapped_column(ForeignKey("connected_apps.id"))
+    destination: Mapped[str] = mapped_column(String(40))
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    status: Mapped[str] = mapped_column(String(20), default="pending", server_default="pending")
+    attempts: Mapped[int] = mapped_column(default=0, server_default="0")
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    lease_token: Mapped[str | None] = mapped_column(String(36))
+    leased_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(String(120))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

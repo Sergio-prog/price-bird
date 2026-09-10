@@ -318,7 +318,7 @@ async def wizard_threshold(message: Message, state: FSMContext, session: AsyncSe
     except Exception:
         await message.answer("Send a valid positive number.", reply_markup=back_to_menu_keyboard())
         return
-    if threshold <= 0:
+    if not threshold.is_finite() or threshold <= 0 or threshold >= Decimal("1e42"):
         await message.answer("Send a valid positive number.", reply_markup=back_to_menu_keyboard())
         return
 
@@ -347,11 +347,11 @@ async def _ensure_callback_access(callback: CallbackQuery, session: AsyncSession
 
 def _alerts_message(alerts: list, *, prefix: str = "") -> tuple[str, object | None]:
     if not alerts:
-        return f"{prefix}No active alerts. Use /alert BTC 10% or /newalert.", start_menu_keyboard()
+        return f"{prefix}No alerts. Use /alert BTC 10% or /newalert.", start_menu_keyboard()
 
-    lines = [f"{prefix}Active alerts:"]
+    lines = [f"{prefix}Alerts:"]
     for alert in alerts:
-        lines.append(f"#{alert.id}: {describe_alert(alert)}")
+        lines.append(f"#{alert.id}: {describe_alert(alert)} [{alert.status}]")
     return "\n".join(lines), alert_list_keyboard(alerts)
 
 
@@ -414,12 +414,16 @@ def _parsed_threshold(alert_type: str, threshold: Decimal) -> ParsedAlertCommand
             "percent": AlertType.PERCENT_CHANGE,
             "above": AlertType.PRICE_ABOVE,
             "below": AlertType.PRICE_BELOW,
+            "mcap_above": AlertType.MCAP_ABOVE,
+            "mcap_below": AlertType.MCAP_BELOW,
         }[alert_type],
         threshold_value=threshold,
         direction={
             "percent": AlertDirection.BOTH,
             "above": AlertDirection.UP,
             "below": AlertDirection.DOWN,
+            "mcap_above": AlertDirection.UP,
+            "mcap_below": AlertDirection.DOWN,
         }[alert_type],
     )
 

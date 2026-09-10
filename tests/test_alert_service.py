@@ -17,6 +17,12 @@ async def test_percent_alert_stays_active_after_trigger(monkeypatch: pytest.Monk
         threshold_value=Decimal("10"),
         direction=AlertDirection.BOTH.value,
     )
+    alert.user = SimpleNamespace(access_status="active")
+    alert.expires_at = None
+    alert.armed = True
+    alert.repeat = alert.type == "percent_change"
+    alert.last_triggered_at = None
+    alert.cooldown_seconds = 900
     calls = []
 
     await _run_refresh(monkeypatch, alert, calls)
@@ -34,6 +40,12 @@ async def test_limit_alert_is_marked_triggered_after_trigger(monkeypatch: pytest
         threshold_value=Decimal("110"),
         direction=AlertDirection.UP.value,
     )
+    alert.user = SimpleNamespace(access_status="active")
+    alert.expires_at = None
+    alert.armed = True
+    alert.repeat = alert.type == "percent_change"
+    alert.last_triggered_at = None
+    alert.cooldown_seconds = 900
     calls = []
 
     await _run_refresh(monkeypatch, alert, calls)
@@ -61,6 +73,10 @@ async def _run_refresh(monkeypatch: pytest.MonkeyPatch, alert, calls: list[str])
     async def fake_mark_alert_triggered(session, alert_id):
         calls.append(f"mark_triggered:{alert_id}")
 
+    async def fake_queue(*args):
+        pass
+
+    monkeypatch.setattr(service, "queue_event", fake_queue)
     monkeypatch.setattr(service.provider_registry, "get_price", fake_get_price)
     monkeypatch.setattr(service.repo, "create_snapshot", fake_create_snapshot)
     monkeypatch.setattr(service.repo, "active_alerts_for_asset", fake_active_alerts_for_asset)

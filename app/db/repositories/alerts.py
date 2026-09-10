@@ -29,6 +29,7 @@ async def create_alert(
         baseline_price=baseline_price,
         threshold_value=threshold_value,
         direction=direction,
+        repeat=alert_type == "percent_change",
     )
     session.add(alert)
     await session.flush()
@@ -42,7 +43,7 @@ async def active_alerts_for_user(session: AsyncSession, telegram_id: int) -> Seq
         .options(selectinload(Alert.asset).selectinload(Asset.links))
         .where(
             User.telegram_id == telegram_id,
-            Alert.status == AlertStatus.ACTIVE.value,
+            Alert.status.in_([AlertStatus.ACTIVE.value, AlertStatus.PAUSED.value]),
         )
         .order_by(Alert.created_at.desc())
     )
@@ -56,7 +57,7 @@ async def delete_active_alert_for_user(session: AsyncSession, *, telegram_id: in
         .where(
             Alert.id == alert_id,
             User.telegram_id == telegram_id,
-            Alert.status == AlertStatus.ACTIVE.value,
+            Alert.status.in_([AlertStatus.ACTIVE.value, AlertStatus.PAUSED.value]),
         )
     )
     if alert is None:
@@ -71,6 +72,7 @@ async def active_alerts_for_asset(session: AsyncSession, asset_id: int) -> Seque
     result = await session.scalars(
         select(Alert)
         .options(selectinload(Alert.user), selectinload(Alert.asset).selectinload(Asset.links))
+        .with_for_update()
         .where(Alert.asset_id == asset_id, Alert.status == AlertStatus.ACTIVE.value)
     )
     return result.all()

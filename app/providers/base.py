@@ -28,13 +28,12 @@ class PriceQuote:
     raw: dict
     price_native: Decimal | None = None
     native_symbol: str | None = None
+    market_cap_usd: Decimal | None = None
 
 
 class PriceProvider(Protocol):
     name: str
 
-    async def search_assets(self, query: str, *, nft: bool = False) -> list[AssetCandidate]:
-        ...
+    async def search_assets(self, query: str, *, nft: bool = False) -> list[AssetCandidate]: ...
 
-    async def get_price(self, asset: Asset) -> PriceQuote:
-        ...
+    async def get_price(self, asset: Asset) -> PriceQuote: ...

@@ -10,14 +10,11 @@ from sqlalchemy.orm import selectinload
 from app.alerts.service import refresh_and_evaluate_asset
 from app.core.config import settings
 from app.db import repositories as repo
-from app.db.models import Alert, AlertEvent, Asset
+from app.db.models import Asset
 from app.db.session import SessionLocal
-from app.notifications import send_alert_notification
 from app.utils.queues import (
     dequeue_asset_refresh,
-    dequeue_notification,
     enqueue_asset_refresh,
-    enqueue_notification,
 )
 from app.utils.redis import get_redis
 
@@ -55,13 +52,15 @@ async def process_refreshes() -> None:
             if asset_id is None:
                 await asyncio.sleep(1)
                 continue
-            lock = client.lock(f"lock:asset_refresh:{asset_id}", timeout=settings.price_refresh_interval_seconds)
+            lock = client.lock(f"lock:asset_refresh:{asset_id}", timeout=max(120, settings.price_refresh_interval_seconds))
             if not await lock.acquire(blocking=False):
                 logger.debug("Skipped asset refresh because lock is held; asset_id=%s", asset_id)
                 continue
             try:
                 async with SessionLocal() as session:
-                    asset = await session.scalar(select(Asset).where(Asset.id == asset_id).options(selectinload(Asset.links)))
+                    asset = await session.scalar(
+                        select(Asset).where(Asset.id == asset_id).with_for_update().options(selectinload(Asset.links))
+                    )
                     if asset is None:
                         logger.warning("Skipped asset refresh because asset no longer exists; asset_id=%s", asset_id)
                         continue
@@ -85,50 +84,24 @@ async def process_refreshes() -> None:
                         asset.symbol,
                         len(event_ids),
                     )
-                for event_id in event_ids:
-                    await enqueue_notification(client, event_id)
-                    logger.info("Queued alert notification; event_id=%s asset_id=%s", event_id, asset_id)
             finally:
-                await lock.release()
+                try:
+                    await lock.release()
+                except Exception:
+                    logger.warning("Asset refresh lease expired; database locks protected evaluation")
     finally:
         logger.info("Asset refresh worker stopped")
         await client.aclose()
 
 
 async def process_notifications() -> None:
-    client = get_redis()
+    from app.delivery.worker import run_deliveries
+
     bot = Bot(settings.bot_token)
-    logger.info("Notification worker started")
     try:
-        while True:
-            event_id = await dequeue_notification(client)
-            if event_id is None:
-                await asyncio.sleep(1)
-                continue
-            async with SessionLocal() as session:
-                event = await session.scalar(
-                    select(AlertEvent)
-                    .where(AlertEvent.id == event_id)
-                    .options(
-                        selectinload(AlertEvent.alert).selectinload(Alert.user),
-                        selectinload(AlertEvent.alert).selectinload(Alert.asset).selectinload(Asset.links),
-                        selectinload(AlertEvent.snapshot),
-                    )
-                )
-                if event is None:
-                    logger.warning("Skipped notification because event no longer exists; event_id=%s", event_id)
-                    continue
-                try:
-                    logger.info("Sending alert notification; event_id=%s alert_id=%s", event.id, event.alert_id)
-                    await send_alert_notification(session, bot, event)
-                except Exception:
-                    logger.exception("Failed to send notification for event %s", event_id)
-                await session.commit()
-                logger.info("Notification processed; event_id=%s", event_id)
+        await asyncio.gather(*(run_deliveries(bot) for _ in range(4)))
     finally:
-        logger.info("Notification worker stopped")
         await bot.session.close()
-        await client.aclose()
 
 
 async def async_main() -> None:

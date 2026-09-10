@@ -173,4 +173,6 @@ def _format_condition(parsed: ParsedAlertCommand) -> str:
         return f"Price goes above ${format_decimal(parsed.threshold_value)}"
     if parsed.alert_type == AlertType.PRICE_BELOW:
         return f"Price goes below ${format_decimal(parsed.threshold_value)}"
+    if parsed.alert_type in {AlertType.MCAP_ABOVE, AlertType.MCAP_BELOW}:
+        return f"Market cap {parsed.direction.value}: ${format_decimal(parsed.threshold_value)}"
     return "Price alert"

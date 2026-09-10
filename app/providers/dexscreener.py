@@ -63,4 +63,9 @@ class DexScreenerProvider:
         if not pairs:
             raise LookupError(f"No DexScreener pair for {asset.symbol}")
         best = max(pairs, key=lambda pair: float((pair.get("liquidity") or {}).get("usd") or 0))
-        return PriceQuote(price_usd=Decimal(str(best["priceUsd"])), source=self.name, raw=best)
+        return PriceQuote(
+            price_usd=Decimal(str(best["priceUsd"])),
+            source=self.name,
+            raw=best,
+            market_cap_usd=Decimal(str(best["marketCap"])) if best.get("marketCap") is not None else None,
+        )
