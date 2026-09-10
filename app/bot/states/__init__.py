@@ -1,3 +1,3 @@
-from app.bot.states.alerts import AlertWizard
+from app.bot.states.alerts import AlertEdit, AlertWizard
 
-__all__ = ["AlertWizard"]
+__all__ = ["AlertEdit", "AlertWizard"]

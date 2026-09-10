@@ -71,8 +71,22 @@ def query_prompt(*, nft: bool) -> str:
 
 def provider_failed_message(*, nft: bool) -> str:
     if nft:
-        return "Failed to search NFT collections. Provider is unavailable or not configured yet. Try again later."
+        return "Failed to search NFT collections. Provider is unavailable right now. Try again later."
     return "Failed to search assets. Provider is unavailable right now. Try again later."
+
+
+def provider_misconfigured_message(*, nft: bool) -> str:
+    if nft:
+        return "NFT search is unavailable: the OpenSea API key is missing or expired. Ask an admin to renew it."
+    return "Asset search is unavailable: provider is not configured. Ask an admin to check the bot settings."
+
+
+def no_alerts_message() -> str:
+    return "No alerts here. Use <code>/alert BTC 10%</code> or create it in menu."
+
+
+def alerts_list_message(total: int) -> str:
+    return f"📌 <b>Active alerts</b> ({total})\nTap an alert to edit it."
 
 
 def no_matches_message(*, nft: bool) -> str:
@@ -83,7 +97,14 @@ def no_matches_message(*, nft: bool) -> str:
 
 def threshold_prompt(*, asset_label: str, alert_type: str) -> str:
     if alert_type.startswith("mcap_"):
-        return f"<b>{escape(asset_label)}</b>\nEnter actual market cap in USD. FDV is not used."
+        return "\n".join(
+            [
+                f"<b>{escape(asset_label)}</b>",
+                "",
+                "Enter actual market cap in USD. FDV is not used.",
+                "One time: the alert is removed after it fires once. Otherwise it rearms and repeats.",
+            ]
+        )
     if alert_type == "percent":
         return "\n".join(
             [

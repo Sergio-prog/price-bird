@@ -27,7 +27,6 @@ router = Router(name="settings")
 
 class ConnectionWizard(StatesGroup):
     url = State()
-    alert_value = State()
 
 
 def keyboard(rows):

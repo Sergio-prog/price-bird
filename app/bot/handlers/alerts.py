@@ -4,13 +4,13 @@ import logging
 from decimal import Decimal
 
 from aiogram import F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.alerts.parser import ParsedAlertCommand, parse_alert_command
-from app.alerts.service import describe_alert
 from app.bot.handlers.helpers import (
     candidate_from_dict,
     command_int_arg,
@@ -27,12 +27,16 @@ from app.bot.keyboards import (
     back_to_menu_keyboard,
     start_menu_keyboard,
     threshold_keyboard,
+    wizard_back_keyboard,
 )
 from app.bot.messages import (
+    alerts_list_message,
     asset_type_prompt,
     examples_message,
+    no_alerts_message,
     no_matches_message,
     provider_failed_message,
+    provider_misconfigured_message,
     query_prompt,
     start_message,
     threshold_prompt,
@@ -40,16 +44,21 @@ from app.bot.messages import (
 from app.bot.states import AlertWizard
 from app.db import repositories as repo
 from app.db.enums import AlertDirection, AlertType, AssetType
+from app.providers.base import ProviderConfigurationError
 from app.providers.registry import provider_registry
 
 router = Router(name="alerts")
 logger = logging.getLogger(__name__)
+
+CANDIDATES_PROMPT = "Select the asset to watch:"
+ALERT_TYPE_PROMPT = "Choose when this alert should trigger:"
 
 
 @router.callback_query(F.data == "menu:newalert")
 async def new_alert_menu(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
     if not await _ensure_callback_access(callback, session):
         return
+    await state.clear()
     await state.set_state(AlertWizard.waiting_asset_type)
     if isinstance(callback.message, Message):
         await state.update_data(wizard_chat_id=callback.message.chat.id, wizard_message_id=callback.message.message_id)
@@ -65,14 +74,19 @@ async def new_alert_menu(callback: CallbackQuery, state: FSMContext, session: As
 async def list_alerts_menu(callback: CallbackQuery, session: AsyncSession) -> None:
     if not await _ensure_callback_access(callback, session):
         return
-    if callback.from_user is None:
-        await callback.answer()
-        return
+    await _render_alerts_page(callback, session, page=1)
 
-    alerts = list(await repo.active_alerts_for_user(session, callback.from_user.id))
-    if isinstance(callback.message, Message):
-        text, reply_markup = _alerts_message(alerts)
-        await callback.message.edit_text(text, reply_markup=reply_markup)
+
+@router.callback_query(F.data.startswith("alerts:page:"))
+async def alerts_page(callback: CallbackQuery, session: AsyncSession) -> None:
+    if not await _ensure_callback_access(callback, session):
+        return
+    raw_page = (callback.data or "").rsplit(":", 1)[1]
+    await _render_alerts_page(callback, session, page=int(raw_page) if raw_page.isdigit() else 1)
+
+
+@router.callback_query(F.data == "alerts:noop")
+async def alerts_noop(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
@@ -100,8 +114,8 @@ async def list_alerts(message: Message, session: AsyncSession) -> None:
         return
 
     alerts = list(await repo.active_alerts_for_user(session, message.from_user.id))
-    text, reply_markup = _alerts_message(alerts)
-    await message.answer(text, reply_markup=reply_markup)
+    text, reply_markup = alerts_message(alerts)
+    await message.answer(text, reply_markup=reply_markup, parse_mode="HTML")
 
 
 @router.message(Command("deletealert"))
@@ -137,6 +151,7 @@ async def cancel_alert_wizard(message: Message, state: FSMContext) -> None:
 async def new_alert(message: Message, state: FSMContext, session: AsyncSession) -> None:
     if not await ensure_access(message, session):
         return
+    await state.clear()
     await state.set_state(AlertWizard.waiting_asset_type)
     prompt = await message.answer(
         asset_type_prompt(),
@@ -156,7 +171,7 @@ async def wizard_asset_type(callback: CallbackQuery, state: FSMContext) -> None:
         await state.update_data(wizard_chat_id=callback.message.chat.id, wizard_message_id=callback.message.message_id)
         await callback.message.edit_text(
             query_prompt(nft=nft),
-            reply_markup=back_to_menu_keyboard(),
+            reply_markup=wizard_back_keyboard(),
             parse_mode="HTML",
         )
     await callback.answer()
@@ -175,6 +190,10 @@ async def alert_shortcut(message: Message, state: FSMContext, session: AsyncSess
     nft = parsed.asset_type_hint == AssetType.NFT_COLLECTION
     try:
         candidates = await provider_registry.search_assets(parsed.query, nft=nft)
+    except ProviderConfigurationError:
+        logger.exception("Asset provider is misconfigured; query=%s nft=%s shortcut=true", parsed.query, nft)
+        await message.answer(provider_misconfigured_message(nft=nft))
+        return
     except Exception:
         logger.exception("Asset provider search failed; query=%s nft=%s shortcut=true", parsed.query, nft)
         await message.answer(provider_failed_message(nft=nft))
@@ -183,9 +202,10 @@ async def alert_shortcut(message: Message, state: FSMContext, session: AsyncSess
         await message.answer(no_matches_message(nft=nft))
         return
     if len(candidates) > 1:
+        await state.clear()
         await state.update_data(parsed=parsed_to_dict(parsed), candidates=[candidate.__dict__ for candidate in candidates])
         await state.set_state(AlertWizard.waiting_asset)
-        await message.answer("Select the asset to watch:", reply_markup=asset_candidates_keyboard(candidates))
+        await message.answer(CANDIDATES_PROMPT, reply_markup=asset_candidates_keyboard(candidates, back_to_menu=True))
         return
 
     await create_alert_from_candidate(message, session, parsed, candidates[0])
@@ -203,16 +223,20 @@ async def wizard_query(message: Message, state: FSMContext, session: AsyncSessio
         query = query.replace("floor", "").strip()
     try:
         candidates = await provider_registry.search_assets(query, nft=nft)
+    except ProviderConfigurationError:
+        logger.exception("Asset provider is misconfigured; query=%s nft=%s shortcut=false", query, nft)
+        await _send_wizard_message(message, state, provider_misconfigured_message(nft=nft), reply_markup=wizard_back_keyboard())
+        return
     except Exception:
         logger.exception("Asset provider search failed; query=%s nft=%s shortcut=false", query, nft)
-        await _send_wizard_message(message, state, provider_failed_message(nft=nft), reply_markup=back_to_menu_keyboard())
+        await _send_wizard_message(message, state, provider_failed_message(nft=nft), reply_markup=wizard_back_keyboard())
         return
     if not candidates:
-        await _send_wizard_message(message, state, no_matches_message(nft=nft), reply_markup=back_to_menu_keyboard())
+        await _send_wizard_message(message, state, no_matches_message(nft=nft), reply_markup=wizard_back_keyboard())
         return
     await state.update_data(candidates=[candidate.__dict__ for candidate in candidates])
     await state.set_state(AlertWizard.waiting_asset)
-    await _send_wizard_message(message, state, "Select the asset to watch:", reply_markup=asset_candidates_keyboard(candidates))
+    await _send_wizard_message(message, state, CANDIDATES_PROMPT, reply_markup=asset_candidates_keyboard(candidates))
 
 
 @router.callback_query(AlertWizard.waiting_asset, F.data.startswith("asset:"))
@@ -238,7 +262,7 @@ async def wizard_asset(callback: CallbackQuery, state: FSMContext, session: Asyn
     else:
         await state.set_state(AlertWizard.waiting_type)
         if isinstance(callback.message, Message):
-            await callback.message.edit_text("Choose when this alert should trigger:", reply_markup=alert_type_keyboard())
+            await callback.message.edit_text(ALERT_TYPE_PROMPT, reply_markup=alert_type_keyboard())
     await callback.answer()
 
 
@@ -246,49 +270,84 @@ async def wizard_asset(callback: CallbackQuery, state: FSMContext, session: Asyn
 async def wizard_cancel(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     if isinstance(callback.message, Message):
-        await callback.message.edit_text(
+        await _edit_message(
+            callback.message,
             start_message(callback.from_user.first_name, callback.from_user.username)
             if callback.from_user
             else start_message(None, None),
             reply_markup=start_menu_keyboard(),
             parse_mode="HTML",
-            disable_web_page_preview=True,
         )
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("alert_delete:"))
-async def delete_alert_callback(callback: CallbackQuery, session: AsyncSession) -> None:
-    if callback.from_user is None:
-        await callback.answer()
-        return
-
-    alert_id = int((callback.data or "").split(":", 1)[1])
-    deleted = await repo.delete_active_alert_for_user(session, telegram_id=callback.from_user.id, alert_id=alert_id)
-    await session.commit()
+@router.callback_query(AlertWizard.waiting_query, F.data == "wizard:back")
+async def wizard_back_to_asset_type(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.set_state(AlertWizard.waiting_asset_type)
     if isinstance(callback.message, Message):
-        if deleted:
-            alerts = list(await repo.active_alerts_for_user(session, callback.from_user.id))
-            text, reply_markup = _alerts_message(alerts, prefix=f"Deleted alert #{alert_id}.\n\n")
-            await callback.message.edit_text(text, reply_markup=reply_markup)
-        else:
-            await callback.message.edit_text("Active alert not found.", reply_markup=start_menu_keyboard())
-    await callback.answer("Deleted" if deleted else "Not found")
+        await _edit_message(callback.message, asset_type_prompt(), reply_markup=asset_type_keyboard(), parse_mode="HTML")
+    await callback.answer()
+
+
+@router.callback_query(AlertWizard.waiting_asset, F.data == "wizard:back")
+async def wizard_back_to_query(callback: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    if data.get("parsed"):
+        await wizard_cancel(callback, state)
+        return
+    await state.set_state(AlertWizard.waiting_query)
+    if isinstance(callback.message, Message):
+        await state.update_data(wizard_chat_id=callback.message.chat.id, wizard_message_id=callback.message.message_id)
+        await _edit_message(
+            callback.message,
+            query_prompt(nft=bool(data.get("asset_nft"))),
+            reply_markup=wizard_back_keyboard(),
+            parse_mode="HTML",
+        )
+    await callback.answer()
+
+
+@router.callback_query(AlertWizard.waiting_type, F.data == "wizard:back")
+async def wizard_back_to_candidates(callback: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    candidates = [candidate_from_dict(raw) for raw in data.get("candidates", [])]
+    await state.set_state(AlertWizard.waiting_asset)
+    if isinstance(callback.message, Message):
+        await _edit_message(callback.message, CANDIDATES_PROMPT, reply_markup=asset_candidates_keyboard(candidates))
+    await callback.answer()
+
+
+@router.callback_query(AlertWizard.waiting_threshold, F.data == "wizard:back")
+async def wizard_back_to_type(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.set_state(AlertWizard.waiting_type)
+    if isinstance(callback.message, Message):
+        await _edit_message(callback.message, ALERT_TYPE_PROMPT, reply_markup=alert_type_keyboard())
+    await callback.answer()
 
 
 @router.callback_query(AlertWizard.waiting_type, F.data.startswith("alert_type:"))
 async def wizard_type(callback: CallbackQuery, state: FSMContext) -> None:
     value = (callback.data or "").split(":", 1)[1]
-    await state.update_data(alert_type=value)
+    await state.update_data(alert_type=value, one_time=True)
     await state.set_state(AlertWizard.waiting_threshold)
     if isinstance(callback.message, Message):
         data = await state.get_data()
         candidate = candidate_from_dict(data["selected_candidate"])
         await callback.message.edit_text(
             threshold_prompt(asset_label=_candidate_display(candidate), alert_type=value),
-            reply_markup=threshold_keyboard(value),
+            reply_markup=threshold_keyboard(value, one_time=True),
             parse_mode="HTML",
         )
+    await callback.answer()
+
+
+@router.callback_query(AlertWizard.waiting_threshold, F.data == "threshold:toggle_once")
+async def wizard_toggle_once(callback: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    one_time = not data.get("one_time", True)
+    await state.update_data(one_time=one_time)
+    if isinstance(callback.message, Message):
+        await callback.message.edit_reply_markup(reply_markup=threshold_keyboard(data["alert_type"], one_time=one_time))
     await callback.answer()
 
 
@@ -316,10 +375,10 @@ async def wizard_threshold(message: Message, state: FSMContext, session: AsyncSe
     try:
         threshold = Decimal((message.text or "").strip().removesuffix("%"))
     except Exception:
-        await message.answer("Send a valid positive number.", reply_markup=back_to_menu_keyboard())
+        await message.answer("Send a valid positive number.", reply_markup=wizard_back_keyboard())
         return
     if not threshold.is_finite() or threshold <= 0 or threshold >= Decimal("1e42"):
-        await message.answer("Send a valid positive number.", reply_markup=back_to_menu_keyboard())
+        await message.answer("Send a valid positive number.", reply_markup=wizard_back_keyboard())
         return
 
     parsed = _parsed_threshold(data["alert_type"], threshold)
@@ -329,8 +388,35 @@ async def wizard_threshold(message: Message, state: FSMContext, session: AsyncSe
         session,
         parsed,
         candidate,
+        repeat=_wizard_repeat(data),
     )
     await state.clear()
+
+
+def alerts_message(alerts: list, *, page: int = 1) -> tuple[str, InlineKeyboardMarkup]:
+    if not alerts:
+        return no_alerts_message(), back_to_menu_keyboard()
+    return alerts_list_message(len(alerts)), alert_list_keyboard(alerts, page=page)
+
+
+async def _render_alerts_page(callback: CallbackQuery, session: AsyncSession, *, page: int) -> None:
+    if callback.from_user is None or not isinstance(callback.message, Message):
+        await callback.answer()
+        return
+    alerts = list(await repo.active_alerts_for_user(session, callback.from_user.id))
+    text, reply_markup = alerts_message(alerts, page=page)
+    await _edit_message(callback.message, text, reply_markup=reply_markup, parse_mode="HTML")
+    await callback.answer()
+
+
+async def _edit_message(
+    message: Message, text: str, *, reply_markup: InlineKeyboardMarkup | None = None, parse_mode: str | None = None
+) -> None:
+    try:
+        await message.edit_text(text, reply_markup=reply_markup, parse_mode=parse_mode, disable_web_page_preview=True)
+    except TelegramBadRequest as exc:
+        if "message is not modified" not in str(exc):
+            raise
 
 
 async def _ensure_callback_access(callback: CallbackQuery, session: AsyncSession) -> bool:
@@ -343,16 +429,6 @@ async def _ensure_callback_access(callback: CallbackQuery, session: AsyncSession
         await callback.answer("Access denied", show_alert=True)
         return False
     return True
-
-
-def _alerts_message(alerts: list, *, prefix: str = "") -> tuple[str, object | None]:
-    if not alerts:
-        return f"{prefix}No alerts. Use /alert BTC 10% or /newalert.", start_menu_keyboard()
-
-    lines = [f"{prefix}Alerts:"]
-    for alert in alerts:
-        lines.append(f"#{alert.id}: {describe_alert(alert)} [{alert.status}]")
-    return "\n".join(lines), alert_list_keyboard(alerts)
 
 
 async def _send_wizard_message(message: Message, state: FSMContext, text: str, reply_markup: object | None = None) -> None:
@@ -404,6 +480,12 @@ async def _show_examples_then_menu(message: Message, *, edit_previous: bool) -> 
         parse_mode="HTML",
         disable_web_page_preview=True,
     )
+
+
+def _wizard_repeat(data: dict) -> bool | None:
+    if not str(data.get("alert_type", "")).startswith("mcap_"):
+        return None
+    return not data.get("one_time", True)
 
 
 def _parsed_threshold(alert_type: str, threshold: Decimal) -> ParsedAlertCommand:

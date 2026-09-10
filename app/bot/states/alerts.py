@@ -9,3 +9,7 @@ class AlertWizard(StatesGroup):
     waiting_asset = State()
     waiting_type = State()
     waiting_threshold = State()
+
+
+class AlertEdit(StatesGroup):
+    waiting_value = State()

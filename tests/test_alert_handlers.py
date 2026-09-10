@@ -3,7 +3,14 @@ from types import SimpleNamespace
 import pytest
 
 from app.bot.handlers import alerts as alert_handlers
-from app.bot.messages import examples_message, no_matches_message, start_message
+from app.bot.messages import (
+    examples_message,
+    no_alerts_message,
+    no_matches_message,
+    provider_misconfigured_message,
+    start_message,
+)
+from app.providers.base import ProviderConfigurationError
 
 
 class FakeMessage:
@@ -132,6 +139,105 @@ async def test_wizard_query_uses_selected_nft_asset_type(monkeypatch: pytest.Mon
 
     assert calls == {"query": "milady", "nft": True}
     assert message.answers[0][0] == no_matches_message(nft=True)
-    assert message.answers[0][1].inline_keyboard[0][0].callback_data == "wizard:cancel"
+    assert message.answers[0][1].inline_keyboard[0][0].callback_data == "wizard:back"
     assert state.data["wizard_chat_id"] == 999
     assert state.data["wizard_message_id"] == 1
+
+
+@pytest.mark.asyncio
+async def test_wizard_query_reports_misconfigured_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    message = FakeMessage(text="milady")
+    state = FakeState(data={"asset_nft": True})
+
+    async def fake_ensure_access(message, session) -> bool:
+        return True
+
+    async def fake_search_assets(query: str, *, nft: bool) -> list:
+        raise ProviderConfigurationError("expired")
+
+    monkeypatch.setattr(alert_handlers, "ensure_access", fake_ensure_access)
+    monkeypatch.setattr(alert_handlers.provider_registry, "search_assets", fake_search_assets)
+
+    await alert_handlers.wizard_query(message, state, object())
+
+    assert message.answers[0][0] == provider_misconfigured_message(nft=True)
+
+
+class FakeCallback:
+    def __init__(self, data: str, message: "FakeEditableMessage") -> None:
+        self.data = data
+        self.message = message
+        self.from_user = SimpleNamespace(id=123, first_name="Fotex", username="fotex_24")
+        self.answered = False
+
+    async def answer(self, *args, **kwargs) -> None:
+        self.answered = True
+
+
+class FakeEditableMessage(FakeMessage):
+    def __init__(self) -> None:
+        super().__init__()
+        self.message_id = 55
+        self.edits: list[tuple[str, object | None]] = []
+
+    async def edit_text(self, text: str, reply_markup=None, **kwargs) -> None:
+        self.edits.append((text, reply_markup))
+
+    async def edit_reply_markup(self, reply_markup=None) -> None:
+        self.edits.append(("", reply_markup))
+
+
+@pytest.mark.asyncio
+async def test_wizard_back_returns_to_previous_step(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(alert_handlers, "Message", FakeEditableMessage)
+    message = FakeEditableMessage()
+    state = FakeState("AlertWizard:waiting_threshold", data={"alert_type": "above", "candidates": []})
+
+    await alert_handlers.wizard_back_to_type(FakeCallback("wizard:back", message), state)
+    assert state.state == alert_handlers.AlertWizard.waiting_type
+    assert message.edits[-1][0] == alert_handlers.ALERT_TYPE_PROMPT
+
+    await alert_handlers.wizard_back_to_candidates(FakeCallback("wizard:back", message), state)
+    assert state.state == alert_handlers.AlertWizard.waiting_asset
+    assert message.edits[-1][0] == alert_handlers.CANDIDATES_PROMPT
+
+    await alert_handlers.wizard_back_to_query(FakeCallback("wizard:back", message), state)
+    assert state.state == alert_handlers.AlertWizard.waiting_query
+    assert message.edits[-1][1].inline_keyboard[0][0].callback_data == "wizard:back"
+
+    await alert_handlers.wizard_back_to_asset_type(FakeCallback("wizard:back", message), state)
+    assert state.state == alert_handlers.AlertWizard.waiting_asset_type
+    assert message.edits[-1][1].inline_keyboard[0][0].callback_data == "asset_type:token"
+
+
+@pytest.mark.asyncio
+async def test_wizard_back_from_shortcut_candidates_returns_to_menu(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(alert_handlers, "Message", FakeEditableMessage)
+    message = FakeEditableMessage()
+    state = FakeState("AlertWizard:waiting_asset", data={"parsed": {"query": "btc"}, "candidates": []})
+
+    await alert_handlers.wizard_back_to_query(FakeCallback("wizard:back", message), state)
+
+    assert state.cleared is True
+    assert message.edits[-1][0] == start_message("Fotex", "fotex_24")
+
+
+@pytest.mark.asyncio
+async def test_wizard_toggle_once_flips_state_and_keyboard(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(alert_handlers, "Message", FakeEditableMessage)
+    message = FakeEditableMessage()
+    state = FakeState("AlertWizard:waiting_threshold", data={"alert_type": "mcap_above", "one_time": True})
+
+    await alert_handlers.wizard_toggle_once(FakeCallback("threshold:toggle_once", message), state)
+
+    assert state.data["one_time"] is False
+    assert message.edits[-1][1].inline_keyboard[0][0].text == "One time: ❌"
+    assert alert_handlers._wizard_repeat(state.data) is True
+    assert alert_handlers._wizard_repeat({"alert_type": "percent"}) is None
+
+
+def test_alerts_message_without_alerts_offers_only_menu() -> None:
+    text, markup = alert_handlers.alerts_message([])
+
+    assert text == no_alerts_message()
+    assert [button.callback_data for row in markup.inline_keyboard for button in row] == ["wizard:cancel"]

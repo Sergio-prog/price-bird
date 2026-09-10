@@ -25,6 +25,7 @@ async def create_alert_from_candidate(
     edit_chat_id: int | None = None,
     edit_message_id: int | None = None,
     telegram_id: int | None = None,
+    repeat: bool | None = None,
 ) -> None:
     if telegram_id is None and message.from_user is None:
         return
@@ -43,7 +44,7 @@ async def create_alert_from_candidate(
 
     asset = await repo.upsert_asset_from_candidate(session, candidate)
     try:
-        alert = await create_alert_from_command(session, user_id=user.id, parsed=parsed, selected_asset=asset)
+        alert = await create_alert_from_command(session, user_id=user.id, parsed=parsed, selected_asset=asset, repeat=repeat)
     except Exception as exc:
         await session.rollback()
         await _send_result(
@@ -65,6 +66,7 @@ async def create_alert_from_candidate(
                 f"Trigger: {_format_condition(parsed)}",
                 f"Baseline: ${format_decimal(alert.baseline_price)}",
                 f"Market: {asset_kind_label(asset)}",
+                f"Mode: {'repeat' if alert.repeat else 'one time'}",
             ]
         ),
         reply_markup=alert_created_keyboard(),

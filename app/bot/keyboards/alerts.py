@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+from math import ceil
+
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from app.alerts.formatting import format_compact_usd, format_decimal, format_direction_arrows, format_percent
+from app.db.enums import AlertStatus, AlertType
 from app.db.models import Alert
 from app.providers.base import AssetCandidate
+
+ALERTS_PAGE_SIZE = 8
 
 
 def start_menu_keyboard() -> InlineKeyboardMarkup:
@@ -22,20 +28,20 @@ def asset_type_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text="🪙 Coins / CEX", callback_data="asset_type:token")],
             [InlineKeyboardButton(text="🖼 NFT floor", callback_data="asset_type:nft")],
-            [InlineKeyboardButton(text="↩ Back to menu", callback_data="wizard:cancel")],
+            _menu_button_row(),
         ]
     )
 
 
 def back_to_menu_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="↩ Back to menu", callback_data="wizard:cancel")],
-        ]
-    )
+    return InlineKeyboardMarkup(inline_keyboard=[_menu_button_row()])
 
 
-def asset_candidates_keyboard(candidates: list[AssetCandidate]) -> InlineKeyboardMarkup:
+def wizard_back_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[_wizard_nav_row()])
+
+
+def asset_candidates_keyboard(candidates: list[AssetCandidate], *, back_to_menu: bool = False) -> InlineKeyboardMarkup:
     rows = []
     for index, candidate in enumerate(candidates[:10]):
         rows.append(
@@ -46,7 +52,7 @@ def asset_candidates_keyboard(candidates: list[AssetCandidate]) -> InlineKeyboar
                 )
             ]
         )
-    rows.append([InlineKeyboardButton(text="↩ Back to menu", callback_data="wizard:cancel")])
+    rows.append(_menu_button_row() if back_to_menu else _wizard_nav_row())
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -58,16 +64,18 @@ def alert_type_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="🩸 Drops below", callback_data="alert_type:below")],
             [InlineKeyboardButton(text="Market cap above", callback_data="alert_type:mcap_above")],
             [InlineKeyboardButton(text="Market cap below", callback_data="alert_type:mcap_below")],
-            [InlineKeyboardButton(text="↩ Back to menu", callback_data="wizard:cancel")],
+            _wizard_nav_row(),
         ]
     )
 
 
-def threshold_keyboard(alert_type: str) -> InlineKeyboardMarkup:
+def threshold_keyboard(alert_type: str, *, one_time: bool = True) -> InlineKeyboardMarkup:
     rows = []
     if alert_type == "percent":
         rows.append([InlineKeyboardButton(text="Default (10.00%)", callback_data="threshold:default_percent")])
-    rows.append([InlineKeyboardButton(text="↩ Back to menu", callback_data="wizard:cancel")])
+    if alert_type.startswith("mcap_"):
+        rows.append([InlineKeyboardButton(text=one_time_label(one_time), callback_data="threshold:toggle_once")])
+    rows.append(_wizard_nav_row())
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -81,16 +89,66 @@ def alert_created_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def alert_list_keyboard(alerts: list[Alert]) -> InlineKeyboardMarkup:
+def alert_list_keyboard(alerts: list[Alert], *, page: int = 1, page_size: int = ALERTS_PAGE_SIZE) -> InlineKeyboardMarkup:
+    total_pages = max(ceil(len(alerts) / page_size), 1)
+    page = min(max(page, 1), total_pages)
+    offset = (page - 1) * page_size
     rows = [
         [
-            InlineKeyboardButton(text=f"Settings #{alert.id}", callback_data=f"alert_config:view:{alert.id}"),
-            InlineKeyboardButton(text=f"Delete #{alert.id}", callback_data=f"alert_delete:{alert.id}"),
+            InlineKeyboardButton(
+                text=alert_button_label(alert, offset + index + 1), callback_data=f"alert_config:view:{alert.id}"
+            )
         ]
-        for alert in alerts
+        for index, alert in enumerate(alerts[offset : offset + page_size])
     ]
-    rows.append([InlineKeyboardButton(text="↩ Back to menu", callback_data="wizard:cancel")])
+    if total_pages > 1:
+        rows.append(
+            [
+                InlineKeyboardButton(text="◀️", callback_data=f"alerts:page:{page - 1}" if page > 1 else "alerts:noop"),
+                InlineKeyboardButton(text=f"{page}/{total_pages}", callback_data="alerts:noop"),
+                InlineKeyboardButton(
+                    text="▶️", callback_data=f"alerts:page:{page + 1}" if page < total_pages else "alerts:noop"
+                ),
+            ]
+        )
+    rows.append(_menu_button_row())
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def alert_button_label(alert: Alert, index: int) -> str:
+    symbol = alert.asset.symbol if alert.asset else "asset"
+    threshold = alert.threshold_value
+    if alert.type == AlertType.PERCENT_CHANGE.value:
+        condition = f"{format_percent(threshold)} {format_direction_arrows(alert.direction)}"
+    elif alert.type == AlertType.PRICE_ABOVE.value:
+        condition = f"> ${format_decimal(threshold)}"
+    elif alert.type == AlertType.PRICE_BELOW.value:
+        condition = f"< ${format_decimal(threshold)}"
+    elif alert.type == AlertType.MCAP_ABOVE.value:
+        condition = f"MC > {format_compact_usd(threshold)}"
+    elif alert.type == AlertType.MCAP_BELOW.value:
+        condition = f"MC < {format_compact_usd(threshold)}"
+    else:
+        condition = f"±${format_decimal(threshold)}"
+    label = f"{index}. {symbol} {condition}"
+    if alert.status == AlertStatus.PAUSED.value:
+        label += " ⏸"
+    return _truncate_button_text(label)
+
+
+def one_time_label(one_time: bool) -> str:
+    return f"One time: {'✅' if one_time else '❌'}"
+
+
+def _menu_button_row() -> list[InlineKeyboardButton]:
+    return [InlineKeyboardButton(text="↩️ Back to menu", callback_data="wizard:cancel")]
+
+
+def _wizard_nav_row() -> list[InlineKeyboardButton]:
+    return [
+        InlineKeyboardButton(text="↩️ Back", callback_data="wizard:back"),
+        InlineKeyboardButton(text="🏠 Menu", callback_data="wizard:cancel"),
+    ]
 
 
 def _asset_candidate_label(candidate: AssetCandidate) -> str:

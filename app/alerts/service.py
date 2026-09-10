@@ -21,6 +21,7 @@ async def create_alert_from_command(
     user_id: int,
     parsed: ParsedAlertCommand,
     selected_asset: Asset,
+    repeat: bool | None = None,
 ) -> Alert:
     if (
         not parsed.threshold_value.is_finite()
@@ -53,6 +54,7 @@ async def create_alert_from_command(
         baseline_price=quote.price_usd,
         threshold_value=parsed.threshold_value,
         direction=parsed.direction.value,
+        repeat=repeat,
     )
 
 

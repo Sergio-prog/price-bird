@@ -21,6 +21,7 @@ async def create_alert(
     baseline_price: Decimal,
     threshold_value: Decimal,
     direction: str,
+    repeat: bool | None = None,
 ) -> Alert:
     alert = Alert(
         user_id=user_id,
@@ -29,7 +30,7 @@ async def create_alert(
         baseline_price=baseline_price,
         threshold_value=threshold_value,
         direction=direction,
-        repeat=alert_type == "percent_change",
+        repeat=alert_type == "percent_change" if repeat is None else repeat,
     )
     session.add(alert)
     await session.flush()
