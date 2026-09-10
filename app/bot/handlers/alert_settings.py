@@ -12,14 +12,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.alerts.formatting import (
-    format_cooldown,
-    format_decimal,
-    format_direction,
-    format_direction_arrows,
-    format_threshold,
-)
-from app.alerts.service import asset_kind_label, describe_alert
+from app.alerts.formatting import format_decimal, format_direction, format_direction_arrows, format_threshold
+from app.alerts.service import alert_currency, asset_kind_label, describe_alert
 from app.bot.handlers.alerts import alerts_message
 from app.bot.handlers.settings import keyboard, owned_user
 from app.bot.keyboards import one_time_label
@@ -27,12 +21,18 @@ from app.bot.states import AlertEdit
 from app.db import repositories as repo
 from app.db.enums import AlertStatus, AlertType
 from app.db.models import Alert
+from app.utils.amounts import parse_amount, resolve_currency
+from app.utils.currency import native_symbol_or_none
+from app.utils.durations import format_duration, parse_duration
 
 router = Router(name="alert_settings")
 
-COOLDOWN_OPTIONS = [60, 900, 3600, 86400]
 DIRECTION_OPTIONS = ["both", "up", "down"]
 EDITABLE_STATUSES = [AlertStatus.ACTIVE.value, AlertStatus.PAUSED.value]
+INPUT_FIELDS = {"threshold", "note", "cooldown", "expiry"}
+MIN_DURATION = timedelta(minutes=1)
+MAX_COOLDOWN = timedelta(days=365)
+MAX_EXPIRY = timedelta(days=5 * 365)
 
 
 @router.callback_query(F.data.startswith("alert_config:"))
@@ -54,7 +54,7 @@ async def configure_alert(callback: CallbackQuery, state: FSMContext, session: A
         await callback.answer("Alert not found")
         return
     action = parts[1]
-    if action in {"threshold", "note"}:
+    if action in INPUT_FIELDS:
         await state.set_state(AlertEdit.waiting_value)
         await state.update_data(alert_id=alert.id, field=action)
         await callback.message.answer(_value_prompt(alert, action))
@@ -74,8 +74,6 @@ async def configure_alert(callback: CallbackQuery, state: FSMContext, session: A
         return
     if action == "direction" and alert.type == AlertType.PERCENT_CHANGE.value:
         alert.direction = _next_option(DIRECTION_OPTIONS, alert.direction)
-    elif action == "expiry":
-        alert.expires_at = None if alert.expires_at else datetime.now(UTC) + timedelta(days=7)
     elif action == "pause":
         if alert.status == AlertStatus.PAUSED.value and alert.expires_at and alert.expires_at <= datetime.now(UTC):
             await callback.answer("Clear the expiry before resuming", show_alert=True)
@@ -83,8 +81,6 @@ async def configure_alert(callback: CallbackQuery, state: FSMContext, session: A
         alert.status = AlertStatus.PAUSED.value if alert.status == AlertStatus.ACTIVE.value else AlertStatus.ACTIVE.value
     elif action == "repeat":
         alert.repeat = not alert.repeat
-    elif action == "cooldown":
-        alert.cooldown_seconds = _next_option(COOLDOWN_OPTIONS, alert.cooldown_seconds)
     await session.commit()
     text, markup = alert_settings_view(alert)
     await _edit(callback.message, text, markup)
@@ -107,14 +103,34 @@ async def edit_alert_value(message: Message, state: FSMContext, session: AsyncSe
     text = (message.text or "").strip()
     if data["field"] == "threshold":
         try:
-            value = Decimal(text.removesuffix("%"))
+            if alert.type == AlertType.PERCENT_CHANGE.value:
+                value, currency = Decimal(text.removesuffix("%").strip()), "USD"
+            else:
+                value, unit = parse_amount(text)
+                currency = resolve_currency(unit, default=alert_currency(alert), native_symbol=_native_symbol(alert))
             if not value.is_finite() or value <= 0 or value >= Decimal("1e42") or value.as_tuple().exponent < -36:
-                raise ValueError
-        except (ValueError, InvalidOperation):
-            await message.answer("Send a positive finite number with at most 36 decimal places.")
+                raise ValueError("Send a positive finite number with at most 36 decimal places.")
+        except (ValueError, InvalidOperation) as exc:
+            await message.answer(str(exc) or "Send a positive finite number with at most 36 decimal places.")
             return
         alert.threshold_value = value
+        alert.threshold_currency = currency
         alert.armed = True
+    elif data["field"] == "cooldown":
+        try:
+            alert.cooldown_seconds = int(_parse_bounded_duration(text, MAX_COOLDOWN).total_seconds())
+        except ValueError as exc:
+            await message.answer(str(exc))
+            return
+    elif data["field"] == "expiry":
+        if text == "-":
+            alert.expires_at = None
+        else:
+            try:
+                alert.expires_at = datetime.now(UTC) + _parse_bounded_duration(text, MAX_EXPIRY)
+            except ValueError as exc:
+                await message.answer(str(exc))
+                return
     else:
         if not text or len(text) > 300:
             await message.answer("Use 1 to 300 characters, or - to clear the note.")
@@ -135,23 +151,23 @@ def alert_settings_view(alert: Alert) -> tuple[str, InlineKeyboardMarkup]:
         "",
         f"Status: {'▶️ active' if alert.status == AlertStatus.ACTIVE.value else '⏸ paused'}",
         f"Mode: {'one time, removed after it fires' if not alert.repeat else 'repeats after the condition resets'}",
-        f"Threshold: {format_threshold(alert.type, alert.threshold_value)}",
+        f"Threshold: {format_threshold(alert.type, alert.threshold_value, alert_currency(alert))}",
         f"Baseline: ${format_decimal(alert.baseline_price)}",
-        f"Cooldown: {format_cooldown(alert.cooldown_seconds)}",
+        f"Cooldown: {format_duration(alert.cooldown_seconds)}",
         *([f"Direction: {format_direction(alert.direction)}"] if is_percent else []),
-        f"Expires: {alert.expires_at.strftime('%Y-%m-%d %H:%M UTC') if alert.expires_at else 'never'}",
+        f"Expires: {_expiry_label(alert)}",
         f"Note: {escape(alert.note) if alert.note else 'none'}",
     ]
     rows = [
         [("⏸ Pause" if alert.status == AlertStatus.ACTIVE.value else "▶️ Resume", f"alert_config:pause:{alert.id}")],
         [(one_time_label(not alert.repeat), f"alert_config:repeat:{alert.id}")],
-        [(f"Cooldown: {format_cooldown(alert.cooldown_seconds)}", f"alert_config:cooldown:{alert.id}")],
+        [(f"⏱ Cooldown: {format_duration(alert.cooldown_seconds)}", f"alert_config:cooldown:{alert.id}")],
     ]
     if is_percent:
         rows.append([(f"Direction: {format_direction_arrows(alert.direction)}", f"alert_config:direction:{alert.id}")])
     rows += [
         [("✏️ Threshold", f"alert_config:threshold:{alert.id}"), ("📝 Note", f"alert_config:note:{alert.id}")],
-        [("⏳ Clear expiry" if alert.expires_at else "⏳ Expire in 7 days", f"alert_config:expiry:{alert.id}")],
+        [(f"⏳ Expires: {_expiry_label(alert, compact=True)}", f"alert_config:expiry:{alert.id}")],
         [("🗑 Delete", f"alert_config:delete:{alert.id}")],
         [("↩️ Back to alerts", "menu:alerts")],
     ]
@@ -178,11 +194,18 @@ async def _edit(message: Message, text: str, markup: InlineKeyboardMarkup) -> No
 def _value_prompt(alert: Alert, field: str) -> str:
     if field == "note":
         return "Send a note, up to 300 characters. Send - to clear it."
+    if field == "cooldown":
+        return f"Send a cooldown like 15m, 2h or 1d. Current: {format_duration(alert.cooldown_seconds)}"
+    if field == "expiry":
+        return f"Send an expiry like 24h, 2d, 3mo or 1y. Send - to never expire. Current: {_expiry_label(alert)}"
+    current = format_threshold(alert.type, alert.threshold_value, alert_currency(alert))
     if alert.type == AlertType.PERCENT_CHANGE.value:
-        return f"Send a new threshold in %. Current: {format_threshold(alert.type, alert.threshold_value)}"
+        return f"Send a new threshold in %. Current: {current}"
+    native_symbol = _native_symbol(alert)
+    units = f"USD or {native_symbol} (e.g. $0.023, 23m, 1.2 {native_symbol})" if native_symbol else "USD (e.g. $0.023, 23m)"
     if alert.type in {AlertType.MCAP_ABOVE.value, AlertType.MCAP_BELOW.value}:
-        return f"Send a new market cap in USD. Current: {format_threshold(alert.type, alert.threshold_value)}"
-    return f"Send a new price in USD. Current: {format_threshold(alert.type, alert.threshold_value)}"
+        return f"Send a new market cap in {units}. Current: {current}"
+    return f"Send a new price in {units}. Current: {current}"
 
 
 def _confirm_delete_text(alert: Alert) -> str:
@@ -196,6 +219,33 @@ def _confirm_delete_keyboard(alert: Alert) -> InlineKeyboardMarkup:
             [("↩️ Back", f"alert_config:view:{alert.id}")],
         ]
     )
+
+
+def _native_symbol(alert: Alert) -> str | None:
+    if alert.asset is None:
+        return None
+    return native_symbol_or_none((alert.asset.extra or {}).get("native_symbol"))
+
+
+def _expiry_label(alert: Alert, *, compact: bool = False) -> str:
+    if not alert.expires_at:
+        return "never"
+    remaining = int((alert.expires_at - datetime.now(UTC)).total_seconds())
+    if remaining <= 0:
+        return "expired"
+    remaining = max(remaining - remaining % 60, 60)
+    if compact:
+        return f"in {format_duration(remaining)}"
+    return f"{alert.expires_at.strftime('%Y-%m-%d %H:%M UTC')} (in {format_duration(remaining)})"
+
+
+def _parse_bounded_duration(text: str, maximum: timedelta) -> timedelta:
+    duration = parse_duration(text)
+    if duration < MIN_DURATION:
+        raise ValueError("Use at least 1 minute.")
+    if duration > maximum:
+        raise ValueError(f"Use at most {format_duration(int(maximum.total_seconds()))}.")
+    return duration
 
 
 def _next_option(options: list, current):
