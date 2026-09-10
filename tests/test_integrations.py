@@ -67,7 +67,7 @@ def test_default_connection_uses_catalog_url_and_secret():
         url=None,
     )
 
-    assert connection_url(connection) == "https://trenchbook.serhiifotex.dev/integrations/pricebird/webhook"
+    assert connection_url(connection) == "https://trenches.serhiifotex.dev/integrations/pricebird/webhook"
     assert connection_secret(connection) == secret
 
 

@@ -2,7 +2,7 @@
 
 Async Telegram bot for token, NFT floor, and CEX price alerts.
 
-Production: [price-alerts-tg.serhiifotex.dev](https://price-alerts-tg.serhiifotex.dev). The built-in Trenchbook integration targets [trenchbook.serhiifotex.dev](https://trenchbook.serhiifotex.dev).
+Production: [price-alerts-tg.serhiifotex.dev](https://price-alerts-tg.serhiifotex.dev). The built-in Trenchbook integration targets [trenches.serhiifotex.dev](https://trenches.serhiifotex.dev).
 
 ## Local setup
 
@@ -95,7 +95,7 @@ uv run price-alert-cli generate-integration-key
 uv run price-alert-cli configure-trenchbook-integration
 ```
 
-The second command prints `PRICEBIRD_WEBHOOK_SECRET` only when it creates or rotates the secret. Copy that value into Trenchbook, set `PRICEBIRD_BOT_USERNAME` there, then choose Connect Trenchbook in Price Bird Settings and send a test. Use the same Telegram account in both bots and start Trenchbook first. Its allowlist still applies. The production receiver is `https://trenchbook.serhiifotex.dev/integrations/pricebird/webhook`; pass `--base-url` when installing a different Trenchbook deployment.
+The second command prints `PRICEBIRD_WEBHOOK_SECRET` only when it creates or rotates the secret. Copy that value into Trenchbook, set `PRICEBIRD_BOT_USERNAME` there, then choose Connect Trenchbook in Price Bird Settings and send a test. Use the same Telegram account in both bots and start Trenchbook first. Its allowlist still applies. The production receiver is `https://trenches.serhiifotex.dev/integrations/pricebird/webhook`; pass `--base-url` when installing a different Trenchbook deployment.
 
 To rotate the built-in secret, run `uv run price-alert-cli configure-trenchbook-integration --rotate-secret`. Rotation disables existing Trenchbook connections until the receiver has the new value and the user enables the connection again.
 

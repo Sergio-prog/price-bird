@@ -11,7 +11,7 @@ from app.integrations.urls import validate_url
 
 TRENCHBOOK_SLUG = "trenchbook"
 TRENCHBOOK_NAME = "Trenchbook"
-TRENCHBOOK_BASE_URL = "https://trenchbook.serhiifotex.dev"
+TRENCHBOOK_BASE_URL = "https://trenches.serhiifotex.dev"
 TRENCHBOOK_WEBHOOK_PATH = "/integrations/pricebird/webhook"
 
 
