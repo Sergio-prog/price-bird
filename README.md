@@ -106,3 +106,7 @@ Each destination has its own Postgres delivery record, lease and retry state. Wo
 Run `uv run alembic upgrade head` before starting the updated bot and worker. Stop old workers first so only the new delivery path runs. The migration widens price precision and preserves existing alerts. Existing percentage alerts become repeating crossings with a 15-minute cooldown, so a sustained move no longer sends every refresh. Untouched legacy queued events move to the new delivery queue; previously attempted legacy sends are retained as failed for review rather than automatically replayed. A crash after a successful Telegram send but before recording it can still result in a duplicate.
 
 Trenchbook's old limit records are preserved but no longer evaluate after its cutover. Recreate desired alerts in Price Bird before deploying Trenchbook's change. Position-relative targets, rolling-window moves, trailing rules and automatic migration of wallet-based alerts are not included in this release.
+
+## CI checks
+
+Run `uv sync --locked --extra dev`, then `sh scripts/check.sh` for Ruff lint, formatting and pytest. GitHub Actions runs these checks on pull requests and pushes to `main`, along with conventional branch/PR/commit names and Alembic migration/model checks against a fresh PostgreSQL 16 database. PR checks include title edits and support stacked branches. CI does not deploy the application.
