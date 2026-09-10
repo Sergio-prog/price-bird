@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot.handlers.helpers import command_int_arg, ensure_admin
 from app.db import repositories as repo
 from app.db.enums import AccessStatus, UserRole
+from app.delivery.events import queue_trenchbook_debug_alert
 
 router = Router(name="admin")
 
@@ -73,3 +74,19 @@ async def stats(message: Message, session: AsyncSession) -> None:
     await message.answer(
         f"Users: {data['users']}\nActive alerts: {data['active_alerts']}\nWatched assets: {data['watched_assets']}"
     )
+
+
+@router.message(Command("debugalert"))
+async def debug_alert(message: Message, session: AsyncSession) -> None:
+    if not await ensure_admin(message, session) or message.from_user is None:
+        return
+    user = await repo.get_user_by_telegram_id(session, message.from_user.id)
+    alert_id = await queue_trenchbook_debug_alert(session, user.id)
+    if alert_id is None:
+        await message.answer("Connect and enable Trenchbook first.")
+        return
+    if not alert_id:
+        await message.answer("No previous alert is available to replay.")
+        return
+    await session.commit()
+    await message.answer(f"Queued alert #{alert_id} for Trenchbook.")

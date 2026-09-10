@@ -5,6 +5,7 @@ from urllib.parse import urlsplit
 from uuid import uuid4
 
 from aiogram import F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -275,8 +276,11 @@ async def settings_callback(callback: CallbackQuery, state: FSMContext, session:
         markup = keyboard(rows)
     else:
         text, markup = await settings_view(session, user)
-    # Sending a new message also avoids Telegram's 'message is not modified' on test/retry.
-    await callback.message.answer(text, reply_markup=markup)
+    try:
+        await callback.message.edit_text(text, reply_markup=markup)
+    except TelegramBadRequest as exc:
+        if "message is not modified" not in str(exc):
+            raise
     await callback.answer()
 
 

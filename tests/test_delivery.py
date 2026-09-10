@@ -7,8 +7,9 @@ import pytest
 
 from app.alerts import service
 from app.db.models import Alert, Asset, ConnectedApp, User
-from app.delivery.events import queue_event
+from app.delivery.events import queue_event, queue_trenchbook_debug_alert
 from app.delivery.webhook import DeliveryError, PublicResolver, signature, validate_url
+from app.delivery.worker import render_payload
 from app.providers.base import PriceQuote
 
 
@@ -131,3 +132,63 @@ async def test_disabled_destination_is_cancelled_before_send(monkeypatch):
     await worker.process_delivery(delivery, bot)
     bot.send_message.assert_not_awaited()
     assert statements[0].compile().params["status"] == "cancelled"
+
+
+def test_render_payload_formats_percent_alert_and_links_source():
+    message = render_payload(
+        {
+            "type": "alert.triggered",
+            "note": None,
+            "asset": {"symbol": "MEME", "kind": "token", "chain": "solana", "address": "token"},
+            "rule": {
+                "type": "percent_change",
+                "threshold": "10.000000000000000000000000000000000000",
+                "threshold_currency": "USD",
+                "direction": "both",
+            },
+            "observation": {
+                "price_usd": "0.058290000000000000000000000000000000",
+                "price_native": "0.05829",
+                "native_symbol": "USDG",
+                "source": "dexscreener",
+            },
+            "trigger": {"percent_change": "11.4532"},
+            "links": {
+                "dexscreener": "https://dexscreener.com/solana/token",
+                "tradingview": "https://www.tradingview.com/search/?query=MEME",
+            },
+        }
+    )
+
+    assert message.startswith("🔔 <b>Alert for MEME</b>\n\n")
+    assert "<b>Rule:</b> 10.00% move up or down" in message
+    assert "<b>Price:</b> $0.05829" in message
+    assert "Floor:" not in message
+    assert "<b>Change:</b> +11.45%\n\n" in message
+    assert '<b>Source:</b> <a href="https://dexscreener.com/solana/token">DexScreener</a>' in message
+    assert '<b>Links:</b> <a href="https://www.tradingview.com/search/?query=MEME">TradingView</a>' in message
+
+
+@pytest.mark.asyncio
+async def test_debug_alert_replays_latest_real_payload_to_trenchbook():
+    connection = ConnectedApp(id="trenchbook", user_id=1, name="Trenchbook", kind="default", enabled=True)
+    previous = SimpleNamespace(
+        event_id=9,
+        payload={
+            "type": "alert.triggered",
+            "event_id": "old-event",
+            "occurred_at": "2026-01-01T00:00:00+00:00",
+            "alert_id": "42",
+        },
+    )
+    added = []
+    session = SimpleNamespace(scalar=AsyncMock(side_effect=[connection, previous]), add=added.append)
+
+    alert_id = await queue_trenchbook_debug_alert(session, 1)
+
+    assert alert_id == "42"
+    assert len(added) == 1
+    assert added[0].connection_id == connection.id
+    assert added[0].event_id is None
+    assert added[0].payload["event_id"] != previous.payload["event_id"]
+    assert added[0].payload["connection_id"] == connection.id

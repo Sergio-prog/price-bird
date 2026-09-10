@@ -4,7 +4,9 @@ import asyncio
 import logging
 import random
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal, InvalidOperation
 from html import escape
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from aiogram import Bot
@@ -12,6 +14,9 @@ from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, Teleg
 from sqlalchemy import and_, or_, select, update
 from sqlalchemy.orm import selectinload
 
+from app.alerts.formatting import format_decimal, format_direction, format_percent, format_threshold
+from app.alerts.links import format_links
+from app.db.enums import AlertType, AssetType
 from app.db.models import ConnectedApp, Delivery, User
 from app.db.repositories.users import has_bot_access
 from app.db.session import SessionLocal
@@ -25,19 +30,79 @@ def render_payload(payload: dict) -> str:
     if payload["type"] == "connection.test":
         return "Price Bird connection test. No alert was triggered."
     asset, observation, rule = payload["asset"], payload["observation"], payload["rule"]
-    return "\n".join(
-        [
-            f"Alert for <b>{escape(asset['symbol'])}</b>",
-            f"Rule: {escape(rule['type'])} {escape(rule['threshold'])} {escape(rule.get('threshold_currency') or 'USD')}",
-            f"Price: ${escape(observation['price_usd'])}",
-            *(
-                [f"Floor: {escape(observation['price_native'])} {escape(observation['native_symbol'] or '')}"]
-                if observation.get("price_native")
-                else []
-            ),
-            f"Change: {escape(payload['trigger']['percent_change'])}%",
-            f"Source: {escape(observation['source'])}",
-        ]
+    links = _safe_links(payload.get("links") or {})
+    source = observation["source"]
+    source_link = links.pop(source, None)
+    source_text = format_links({source: source_link}) if source_link else escape(_source_label(source))
+    lines = [
+        f"🔔 <b>Alert for {escape(asset['symbol'])}</b>",
+        "",
+        f"<b>Rule:</b> {_format_rule(rule)}",
+        _format_observation(asset, observation),
+        f"<b>Change:</b> {_format_change(payload['trigger']['percent_change'])}",
+        "",
+        f"<b>Source:</b> {source_text}",
+    ]
+    if links:
+        lines.append(f"<b>Links:</b> {format_links(links)}")
+    if payload.get("note"):
+        lines.append(f"<b>Note:</b> {escape(payload['note'])}")
+    return "\n".join(lines)
+
+
+def _format_rule(rule: dict) -> str:
+    alert_type = rule["type"]
+    try:
+        threshold = Decimal(rule["threshold"])
+    except (InvalidOperation, TypeError, ValueError):
+        return f"{escape(alert_type.replace('_', ' ').capitalize())} {escape(str(rule['threshold']))}"
+
+    if alert_type == AlertType.PERCENT_CHANGE.value:
+        direction = format_direction(rule.get("direction") or "both").lower()
+        return f"{format_percent(threshold)} move {escape(direction)}"
+
+    formatted = format_threshold(alert_type, threshold, rule.get("threshold_currency") or "USD")
+    labels = {
+        AlertType.PRICE_ABOVE.value: "Price above",
+        AlertType.PRICE_BELOW.value: "Price below",
+        AlertType.MCAP_ABOVE.value: "Market cap above",
+        AlertType.MCAP_BELOW.value: "Market cap below",
+        AlertType.ABSOLUTE_CHANGE.value: "Price change of",
+    }
+    return f"{labels.get(alert_type, alert_type.replace('_', ' ').capitalize())} {escape(formatted)}"
+
+
+def _format_observation(asset: dict, observation: dict) -> str:
+    usd = _format_decimal_value(observation["price_usd"])
+    if asset.get("kind") == AssetType.NFT_COLLECTION.value and observation.get("price_native"):
+        native = _format_decimal_value(observation["price_native"])
+        symbol = escape(observation.get("native_symbol") or "")
+        return f"<b>Floor:</b> {native} {symbol} (${usd})"
+    return f"<b>Price:</b> ${usd}"
+
+
+def _format_change(value: str) -> str:
+    try:
+        return format_percent(Decimal(value), signed=True)
+    except (InvalidOperation, TypeError, ValueError):
+        return f"{escape(str(value))}%"
+
+
+def _format_decimal_value(value: str) -> str:
+    try:
+        return format_decimal(Decimal(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return escape(str(value))
+
+
+def _safe_links(links: dict) -> dict[str, str]:
+    return {str(name): str(url) for name, url in links.items() if isinstance(url, str) and urlsplit(url).scheme == "https"}
+
+
+def _source_label(source: str) -> str:
+    return {"dexscreener": "DexScreener", "opensea": "OpenSea"}.get(
+        source,
+        source.replace("_", " ").title(),
     )
 
 

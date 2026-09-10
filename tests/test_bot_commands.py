@@ -20,3 +20,4 @@ def test_bot_commands_exclude_admin_by_default() -> None:
     assert "whitelist" not in {command.command for command in public_commands}
     assert "whitelist" in {command.command for command in all_commands}
     assert "help" in {command.command for command in public_commands}
+    assert "debugalert" not in {command.command for command in all_commands}

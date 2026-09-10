@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.alerts.links import build_asset_links
 from app.db.models import Alert, AlertEvent, Asset, ConnectedApp, Delivery
+from app.integrations.catalog import TRENCHBOOK_SLUG
 
 
 async def queue_event(session: AsyncSession, event: AlertEvent, alert: Alert, asset: Asset, quote) -> None:
@@ -82,3 +83,45 @@ async def queue_test(session: AsyncSession, connection: ConnectedApp, telegram_i
             },
         )
     )
+
+
+async def queue_trenchbook_debug_alert(session: AsyncSession, user_id: int) -> str | None:
+    connection = await session.scalar(
+        select(ConnectedApp)
+        .join(ConnectedApp.integration_definition)
+        .where(
+            ConnectedApp.user_id == user_id,
+            ConnectedApp.enabled.is_(True),
+            ConnectedApp.deleted.is_(False),
+            ConnectedApp.integration_definition.has(slug=TRENCHBOOK_SLUG),
+        )
+        .limit(1)
+    )
+    if connection is None:
+        return None
+
+    previous = await session.scalar(
+        select(Delivery)
+        .where(Delivery.user_id == user_id, Delivery.event_id.is_not(None))
+        .order_by(Delivery.created_at.desc())
+        .limit(1)
+    )
+    if previous is None or previous.payload.get("type") != "alert.triggered":
+        return ""
+
+    payload = {
+        **previous.payload,
+        "event_id": str(uuid4()),
+        "connection_id": connection.id,
+        "occurred_at": datetime.now(UTC).isoformat(),
+    }
+    session.add(
+        Delivery(
+            id=str(uuid4()),
+            user_id=user_id,
+            connection_id=connection.id,
+            destination=connection.id,
+            payload=payload,
+        )
+    )
+    return str(payload["alert_id"])
