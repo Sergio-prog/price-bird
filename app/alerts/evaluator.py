@@ -14,12 +14,22 @@ class EvaluationResult:
     percent_change: Decimal
 
 
-def evaluate_alert(alert: Alert, current_price: Decimal) -> EvaluationResult:
-    if alert.baseline_price <= 0:
+def evaluate_alert(alert: Alert, current_price: Decimal, market_cap: Decimal | None = None) -> EvaluationResult:
+    if not current_price.is_finite() or current_price <= 0 or alert.baseline_price <= 0:
         return EvaluationResult(False, None, Decimal("0"))
 
     percent_change = ((current_price - alert.baseline_price) / alert.baseline_price) * Decimal("100")
     direction = AlertDirection.UP if percent_change >= 0 else AlertDirection.DOWN
+
+    if alert.type in {AlertType.MCAP_ABOVE.value, AlertType.MCAP_BELOW.value}:
+        if market_cap is None or not market_cap.is_finite() or market_cap <= 0:
+            return EvaluationResult(False, None, percent_change)
+        above = alert.type == AlertType.MCAP_ABOVE.value
+        return EvaluationResult(
+            market_cap >= alert.threshold_value if above else market_cap <= alert.threshold_value,
+            AlertDirection.UP if above else AlertDirection.DOWN,
+            percent_change,
+        )
 
     if alert.type == AlertType.PERCENT_CHANGE.value:
         threshold = abs(alert.threshold_value)

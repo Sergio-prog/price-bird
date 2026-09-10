@@ -25,6 +25,8 @@ class AlertType(StrEnum):
     PRICE_ABOVE = "price_above"
     PRICE_BELOW = "price_below"
     ABSOLUTE_CHANGE = "absolute_change"
+    MCAP_ABOVE = "mcap_above"
+    MCAP_BELOW = "mcap_below"
 
 
 class AlertDirection(StrEnum):

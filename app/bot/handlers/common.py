@@ -29,6 +29,14 @@ async def start(message: Message, session: AsyncSession) -> None:
     )
     await session.commit()
 
+    if repo.has_bot_access(user) and (message.text or "").split()[-1:] == ["alerts"]:
+        from app.bot.handlers.alerts import _alerts_message
+
+        alerts = list(await repo.active_alerts_for_user(session, user.telegram_id))
+        text, markup = _alerts_message(alerts)
+        await message.answer(text, reply_markup=markup)
+        return
+
     if repo.has_bot_access(user):
         await message.answer(
             start_message(tg_user.first_name, tg_user.username),

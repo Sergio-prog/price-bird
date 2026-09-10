@@ -33,10 +33,10 @@ def test_asset_type_keyboard_separates_tokens_and_nfts() -> None:
 def test_alert_list_keyboard_uses_delete_callbacks() -> None:
     keyboard = alert_list_keyboard([SimpleNamespace(id=123), SimpleNamespace(id=456)])
 
-    assert keyboard.inline_keyboard[0][0].text == "Delete #123"
-    assert keyboard.inline_keyboard[0][0].callback_data == "alert_delete:123"
-    assert keyboard.inline_keyboard[1][0].text == "Delete #456"
-    assert keyboard.inline_keyboard[1][0].callback_data == "alert_delete:456"
+    assert keyboard.inline_keyboard[0][1].text == "Delete #123"
+    assert keyboard.inline_keyboard[0][1].callback_data == "alert_delete:123"
+    assert keyboard.inline_keyboard[1][1].text == "Delete #456"
+    assert keyboard.inline_keyboard[1][1].callback_data == "alert_delete:456"
     assert keyboard.inline_keyboard[2][0].callback_data == "wizard:cancel"
 
 

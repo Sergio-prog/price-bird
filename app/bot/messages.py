@@ -82,6 +82,8 @@ def no_matches_message(*, nft: bool) -> str:
 
 
 def threshold_prompt(*, asset_label: str, alert_type: str) -> str:
+    if alert_type.startswith("mcap_"):
+        return f"<b>{escape(asset_label)}</b>\nEnter actual market cap in USD. FDV is not used."
     if alert_type == "percent":
         return "\n".join(
             [

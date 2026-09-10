@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     provider_timeout_seconds: int = Field(default=10, alias="PROVIDER_TIMEOUT_SECONDS")
     provider_max_attempts: int = Field(default=3, alias="PROVIDER_MAX_ATTEMPTS")
     notification_max_attempts: int = Field(default=5, alias="NOTIFICATION_MAX_ATTEMPTS")
+    webhook_signing_key: str = Field(default="", alias="WEBHOOK_SIGNING_KEY")
+    trenchbook_webhook_url: str = Field(default="", alias="TRENCHBOOK_WEBHOOK_URL")
+    trenchbook_webhook_secret: str = Field(default="", alias="TRENCHBOOK_WEBHOOK_SECRET")
 
     reservoir_base_url: str = Field(default="https://api.reservoir.tools", alias="RESERVOIR_BASE_URL")
     reservoir_api_key: str = Field(default="", alias="RESERVOIR_API_KEY")

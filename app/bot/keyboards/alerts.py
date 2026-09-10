@@ -12,6 +12,7 @@ def start_menu_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="🔔 New alert", callback_data="menu:newalert")],
             [InlineKeyboardButton(text="📌 Active alerts", callback_data="menu:alerts")],
             [InlineKeyboardButton(text="📚 Examples", callback_data="menu:examples")],
+            [InlineKeyboardButton(text="Settings / connected apps", callback_data="settings:open")],
         ]
     )
 
@@ -55,6 +56,8 @@ def alert_type_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="📈 Move % up/down", callback_data="alert_type:percent")],
             [InlineKeyboardButton(text="🚀 Breaks above", callback_data="alert_type:above")],
             [InlineKeyboardButton(text="🩸 Drops below", callback_data="alert_type:below")],
+            [InlineKeyboardButton(text="Market cap above", callback_data="alert_type:mcap_above")],
+            [InlineKeyboardButton(text="Market cap below", callback_data="alert_type:mcap_below")],
             [InlineKeyboardButton(text="↩ Back to menu", callback_data="wizard:cancel")],
         ]
     )
@@ -79,7 +82,13 @@ def alert_created_keyboard() -> InlineKeyboardMarkup:
 
 
 def alert_list_keyboard(alerts: list[Alert]) -> InlineKeyboardMarkup:
-    rows = [[InlineKeyboardButton(text=f"Delete #{alert.id}", callback_data=f"alert_delete:{alert.id}")] for alert in alerts]
+    rows = [
+        [
+            InlineKeyboardButton(text=f"Settings #{alert.id}", callback_data=f"alert_config:view:{alert.id}"),
+            InlineKeyboardButton(text=f"Delete #{alert.id}", callback_data=f"alert_delete:{alert.id}"),
+        ]
+        for alert in alerts
+    ]
     rows.append([InlineKeyboardButton(text="↩ Back to menu", callback_data="wizard:cancel")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
