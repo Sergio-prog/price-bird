@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from html import escape
 from urllib.parse import urlsplit
 from uuid import uuid4
 
@@ -24,6 +25,7 @@ from app.integrations.service import connection_secret, connection_url, create_c
 from app.integrations.urls import validate_url
 
 router = Router(name="settings")
+TRENCHBOOK_BOT_URL = "https://t.me/trenches_fotex_bot"
 
 
 class ConnectionWizard(StatesGroup):
@@ -68,7 +70,8 @@ async def settings_view(session, user):
     return (
         "Delivery settings\n\nChoose where all your alerts are sent. Turn on Price Bird, a connected app, or both. "
         "Turning off a destination cancels its pending deliveries. Alerts keep evaluating. "
-        "Pause individual alerts from /alerts.\n\nTrenchbook uses your same Telegram account; start its bot first.",
+        "Pause individual alerts from /alerts.\n\n"
+        f'<a href="{TRENCHBOOK_BOT_URL}">Trenchbook</a> uses your same Telegram account; start its bot first.',
         keyboard(rows),
     )
 
@@ -84,7 +87,7 @@ async def open_settings(message: Message, state: FSMContext, session: AsyncSessi
         return
     await state.clear()
     text, markup = await settings_view(session, user)
-    await message.answer(text, reply_markup=markup)
+    await message.answer(text, reply_markup=markup, parse_mode="HTML", disable_web_page_preview=True)
 
 
 async def cancel_pending(session, user_id, connection_id=None):
@@ -263,9 +266,12 @@ async def settings_callback(callback: CallbackQuery, state: FSMContext, session:
             host = urlsplit(connection_url(connection)).hostname
         except ValueError:
             host = "unavailable"
-        text = f"{connection.name}\nHost: {host}\nNotifications: {'on' if connection.enabled else 'off'}"
+        name = escape(connection.name)
+        if connection.integration_definition and connection.integration_definition.slug == "trenchbook":
+            name = f'<a href="{TRENCHBOOK_BOT_URL}">{name}</a>'
+        text = f"{name}\nHost: {escape(host or 'unavailable')}\nNotifications: {'on' if connection.enabled else 'off'}"
         if last:
-            text += f"\nLast delivery: {last.status}" + (f" ({last.last_error})" if last.last_error else "")
+            text += f"\nLast delivery: {escape(last.status)}" + (f" ({escape(last.last_error)})" if last.last_error else "")
         rows = [
             [("Disable" if connection.enabled else "Enable", f"settings:toggle:{connection.id}")],
             [("Send test", f"settings:test:{connection.id}"), ("Retry last failure", f"settings:retry:{connection.id}")],
@@ -277,7 +283,12 @@ async def settings_callback(callback: CallbackQuery, state: FSMContext, session:
     else:
         text, markup = await settings_view(session, user)
     try:
-        await callback.message.edit_text(text, reply_markup=markup)
+        await callback.message.edit_text(
+            text,
+            reply_markup=markup,
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+        )
     except TelegramBadRequest as exc:
         if "message is not modified" not in str(exc):
             raise

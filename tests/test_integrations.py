@@ -1,7 +1,9 @@
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from app.bot.handlers.settings import TRENCHBOOK_BOT_URL, settings_view
 from app.core.config import settings
 from app.db.models import ConnectedApp, IntegrationDefinition
 from app.integrations.catalog import TRENCHBOOK_BASE_URL, configure_trenchbook
@@ -67,6 +69,17 @@ def test_default_connection_uses_catalog_url_and_secret():
 
     assert connection_url(connection) == "https://trenchbook.serhiifotex.dev/integrations/pricebird/webhook"
     assert connection_secret(connection) == secret
+
+
+@pytest.mark.asyncio
+async def test_settings_links_to_trenchbook_bot():
+    session = Mock()
+    session.scalars = AsyncMock(side_effect=[[], []])
+    user = SimpleNamespace(id=1, bird_enabled=True)
+
+    text, _ = await settings_view(session, user)
+
+    assert f'<a href="{TRENCHBOOK_BOT_URL}">Trenchbook</a>' in text
 
 
 @pytest.mark.asyncio
