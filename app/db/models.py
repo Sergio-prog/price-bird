@@ -160,15 +160,35 @@ class AlertEvent(Base):
 
 class ConnectedApp(Base, TimestampMixin):
     __tablename__ = "connected_apps"
+    __table_args__ = (UniqueConstraint("user_id", "integration_definition_id", name="uq_connected_apps_user_integration"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    integration_definition_id: Mapped[str | None] = mapped_column(ForeignKey("integration_definitions.id"), index=True)
     name: Mapped[str] = mapped_column(String(80))
     kind: Mapped[str] = mapped_column(String(32))
-    url: Mapped[str] = mapped_column(Text)
+    url: Mapped[str | None] = mapped_column(Text)
+    secret_encrypted: Mapped[str | None] = mapped_column(Text)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     deleted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     secret_version: Mapped[int] = mapped_column(default=1, server_default="1")
+
+    integration_definition: Mapped[IntegrationDefinition | None] = relationship(back_populates="connections", lazy="raise")
+
+
+class IntegrationDefinition(Base, TimestampMixin):
+    __tablename__ = "integration_definitions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    slug: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(80))
+    base_url: Mapped[str] = mapped_column(Text)
+    webhook_path: Mapped[str] = mapped_column(String(255))
+    secret_encrypted: Mapped[str] = mapped_column(Text)
+    secret_version: Mapped[int] = mapped_column(default=1, server_default="1")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+
+    connections: Mapped[list[ConnectedApp]] = relationship(back_populates="integration_definition")
 
 
 class Delivery(Base):

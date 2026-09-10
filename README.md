@@ -2,6 +2,8 @@
 
 Async Telegram bot for token, NFT floor, and CEX price alerts.
 
+Production: [price-alerts-tg.serhiifotex.dev](https://price-alerts-tg.serhiifotex.dev). The built-in Trenchbook integration targets [trenchbook.serhiifotex.dev](https://trenchbook.serhiifotex.dev).
+
 ## Local setup
 
 1. Copy `.env.example` to your real env file and fill `BOT_TOKEN`.
@@ -74,15 +76,25 @@ Price Bird is the only place to create and manage alerts. `/settings` controls w
 
 Repeated alerts rearm after the condition becomes false. They do not repeatedly notify while a price stays beyond its threshold. Price and percentage baselines use real quotes. Market-cap alerts use actual market cap, never FDV. Missing prices or metrics do not trigger or rearm an alert.
 
-To connect Trenchbook, configure:
+Built-in integration definitions live in Postgres. Each definition owns its display name, base URL, webhook path, enabled state and encrypted receiver secret. The application environment contains only `INTEGRATION_SECRETS_KEY`, the master encryption key. Keep that key stable and backed up; losing it makes existing integration secrets unreadable.
 
-- `TRENCHBOOK_WEBHOOK_URL=https://your-trenchbook-host/integrations/pricebird/webhook`
-- `TRENCHBOOK_WEBHOOK_SECRET`, a random secret of at least 32 characters, shared with Trenchbook's `PRICEBIRD_WEBHOOK_SECRET`.
-- In Trenchbook, `PRICEBIRD_BOT_USERNAME` points to this bot. Use the same Telegram user account in both bots and start Trenchbook first. Its allowlist still applies.
+After migrating, create the Trenchbook definition and its signing secret:
 
-Then choose Connect Trenchbook in Settings and send a test. The test is explicitly labelled and contains no invented market data. Trenchbook notifications go to the linked user's private Telegram chat.
+```bash
+# Run once locally and save the result as INTEGRATION_SECRETS_KEY in Price Bird's environment.
+uv run price-alert-cli generate-integration-key
 
-For custom apps, set `WEBHOOK_SIGNING_KEY` to a random secret of at least 32 characters. Keep it stable and backed up. Price Bird derives each connection's signing secret from this key and its unique id/version, so no raw per-connection secrets are stored in the database. Add a name and public HTTPS URL in Settings, configure the receiver with the displayed secret, then enable the connection. Rotation pauses delivery and cancels old pending requests until the receiver is updated.
+# After restarting with that key, create the database definition.
+uv run price-alert-cli configure-trenchbook-integration
+```
+
+The second command prints `PRICEBIRD_WEBHOOK_SECRET` only when it creates or rotates the secret. Copy that value into Trenchbook, set `PRICEBIRD_BOT_USERNAME` there, then choose Connect Trenchbook in Price Bird Settings and send a test. Use the same Telegram account in both bots and start Trenchbook first. Its allowlist still applies. The production receiver is `https://trenchbook.serhiifotex.dev/integrations/pricebird/webhook`; pass `--base-url` when installing a different Trenchbook deployment.
+
+To rotate the built-in secret, run `uv run price-alert-cli configure-trenchbook-integration --rotate-secret`. Rotation disables existing Trenchbook connections until the receiver has the new value and the user enables the connection again.
+
+For custom apps, add a name and public HTTPS URL in Settings. Price Bird creates a unique random signing secret, encrypts it in Postgres and shows the plaintext once. Configure the receiver with that value, then enable the connection. Rotating a custom secret also pauses delivery and cancels pending requests until the receiver is updated.
+
+The built-in Trenchbook secret is shared because it authenticates one operator-controlled Trenchbook deployment. If Price Bird later supports third-party Trenchbook installations, credentials should move to a separate installation record so every deployment gets its own endpoint and secret.
 
 Webhooks use HTTPS on port 443. Private/reserved addresses, embedded credentials and redirects are blocked. URLs cannot be edited in place; disconnect and create a new connection instead, so old private events cannot be silently rerouted.
 
@@ -103,7 +115,7 @@ Each destination has its own Postgres delivery record, lease and retry state. Wo
 
 ## Upgrading
 
-Run `uv run alembic upgrade head` before starting the updated bot and worker. Stop old workers first so only the new delivery path runs. The migration widens price precision and preserves existing alerts. Existing percentage alerts become repeating crossings with a 15-minute cooldown, so a sustained move no longer sends every refresh. Untouched legacy queued events move to the new delivery queue; previously attempted legacy sends are retained as failed for review rather than automatically replayed. A crash after a successful Telegram send but before recording it can still result in a duplicate.
+Run `uv run alembic upgrade head` before starting the updated bot and worker. Stop old workers first so only the new delivery path runs. The migration widens price precision and preserves existing alerts. Existing percentage alerts become repeating crossings with a 15-minute cooldown, so a sustained move no longer sends every refresh. Untouched legacy queued events move to the new delivery queue; previously attempted legacy sends are retained as failed for review rather than automatically replayed. Existing connected apps are disabled because their environment-derived secrets cannot be migrated; run the Trenchbook configuration command or reconnect custom webhooks. A crash after a successful Telegram send but before recording it can still result in a duplicate.
 
 Trenchbook's old limit records are preserved but no longer evaluate after its cutover. Recreate desired alerts in Price Bird before deploying Trenchbook's change. Position-relative targets, rolling-window moves, trailing rules and automatic migration of wallet-based alerts are not included in this release.
 

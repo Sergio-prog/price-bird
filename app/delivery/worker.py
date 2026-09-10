@@ -10,6 +10,7 @@ from uuid import uuid4
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
 from sqlalchemy import and_, or_, select, update
+from sqlalchemy.orm import selectinload
 
 from app.db.models import ConnectedApp, Delivery, User
 from app.db.repositories.users import has_bot_access
@@ -71,7 +72,15 @@ async def process_delivery(delivery: Delivery, bot: Bot) -> None:
     try:
         async with SessionLocal() as session:
             user = await session.get(User, delivery.user_id)
-            connection = await session.get(ConnectedApp, delivery.connection_id) if delivery.connection_id else None
+            connection = (
+                await session.scalar(
+                    select(ConnectedApp)
+                    .where(ConnectedApp.id == delivery.connection_id)
+                    .options(selectinload(ConnectedApp.integration_definition))
+                )
+                if delivery.connection_id
+                else None
+            )
             if not has_bot_access(user) or (delivery.destination == "bird" and not user.bird_enabled):
                 status = "cancelled"
             elif delivery.connection_id and (connection is None or not connection.enabled or connection.deleted):

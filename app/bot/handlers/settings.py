@@ -11,14 +11,16 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from aiogram.types import InlineKeyboardButton as Button
 from aiogram.types import InlineKeyboardMarkup as Markup
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from app.core.config import settings
-from app.db.models import ConnectedApp, Delivery
+from app.db.models import ConnectedApp, Delivery, IntegrationDefinition
 from app.db.repositories.users import get_user_by_telegram_id, has_bot_access
 from app.delivery.events import queue_test
-from app.delivery.webhook import connection_secret, validate_url
+from app.integrations.secrets import decrypt_secret, ensure_encryption_configured
+from app.integrations.service import connection_secret, connection_url, create_custom_connection, rotate_custom_secret
+from app.integrations.urls import validate_url
 
 router = Router(name="settings")
 
@@ -45,14 +47,23 @@ async def settings_view(session, user):
                 ConnectedApp.user_id == user.id,
                 ConnectedApp.deleted.is_(False),
             )
+            .options(selectinload(ConnectedApp.integration_definition))
             .order_by(ConnectedApp.created_at)
+        )
+    )
+    definitions = list(
+        await session.scalars(
+            select(IntegrationDefinition).where(IntegrationDefinition.enabled.is_(True)).order_by(IntegrationDefinition.name)
         )
     )
     rows = [[(f"Price Bird notifications: {'on' if user.bird_enabled else 'off'}", "settings:bird")]]
     rows += [[(f"{c.name}: {'on' if c.enabled else 'off'}", f"settings:view:{c.id}")] for c in connections]
-    if settings.trenchbook_webhook_url and len(settings.trenchbook_webhook_secret) >= 32:
-        if not any(c.kind == "trenchbook" for c in connections):
-            rows.append([("Connect Trenchbook", "settings:trenchbook")])
+    connected_definition_ids = {connection.integration_definition_id for connection in connections}
+    rows += [
+        [(f"Connect {definition.name}", f"settings:connect:{definition.id}")]
+        for definition in definitions
+        if definition.id not in connected_definition_ids
+    ]
     rows += [[("Add custom webhook", "settings:add")], [("Back", "wizard:cancel")]]
     return (
         "Delivery settings\n\nChoose where all your alerts are sent. Turn on Price Bird, a connected app, or both. "
@@ -97,7 +108,11 @@ async def settings_callback(callback: CallbackQuery, state: FSMContext, session:
     action = parts[1]
     await state.clear()
     connection = None
-    if len(parts) == 3:
+    connection_actions = {"view", "toggle", "disconnect", "rotate", "test", "retry"}
+    if action in connection_actions:
+        if len(parts) != 3:
+            await callback.answer("Invalid connection action")
+            return
         connection = await session.scalar(
             select(ConnectedApp)
             .where(
@@ -105,6 +120,7 @@ async def settings_callback(callback: CallbackQuery, state: FSMContext, session:
                 ConnectedApp.user_id == user.id,
                 ConnectedApp.deleted.is_(False),
             )
+            .options(selectinload(ConnectedApp.integration_definition))
             .with_for_update()
         )
         if not connection:
@@ -116,8 +132,10 @@ async def settings_callback(callback: CallbackQuery, state: FSMContext, session:
         if not user.bird_enabled:
             await cancel_pending(session, user.id)
     elif action == "add":
-        if len(settings.webhook_signing_key) < 32:
-            await callback.answer("Custom webhooks are not configured by the operator", show_alert=True)
+        try:
+            ensure_encryption_configured()
+        except ValueError as exc:
+            await callback.answer(str(exc), show_alert=True)
             return
         await state.set_state(ConnectionWizard.url)
         await callback.message.edit_text(
@@ -125,26 +143,72 @@ async def settings_callback(callback: CallbackQuery, state: FSMContext, session:
         )
         await callback.answer()
         return
-    elif action == "trenchbook":
+    elif action == "connect":
+        if len(parts) != 3:
+            await callback.answer("Integration not found")
+            return
+        definition = await session.scalar(
+            select(IntegrationDefinition)
+            .where(IntegrationDefinition.id == parts[2], IntegrationDefinition.enabled.is_(True))
+            .with_for_update()
+        )
+        if definition is None:
+            await callback.answer("Integration not found")
+            return
         try:
-            url = validate_url(settings.trenchbook_webhook_url)
-            if len(settings.trenchbook_webhook_secret) < 32:
-                raise ValueError("Trenchbook is not configured")
+            decrypt_secret(definition.secret_encrypted)
         except ValueError as exc:
             await callback.answer(str(exc), show_alert=True)
             return
-        await session.refresh(user, with_for_update=True)
         existing = await session.scalar(
-            select(ConnectedApp).where(
+            select(ConnectedApp)
+            .where(
                 ConnectedApp.user_id == user.id,
-                ConnectedApp.kind == "trenchbook",
-                ConnectedApp.deleted.is_(False),
+                ConnectedApp.integration_definition_id == definition.id,
             )
+            .options(selectinload(ConnectedApp.integration_definition))
+            .with_for_update()
         )
-        if not existing:
-            session.add(ConnectedApp(id=str(uuid4()), user_id=user.id, kind="trenchbook", name="Trenchbook", url=url))
+        if existing is None:
+            connected_count = await session.scalar(
+                select(func.count())
+                .select_from(ConnectedApp)
+                .where(
+                    ConnectedApp.user_id == user.id,
+                    ConnectedApp.deleted.is_(False),
+                )
+            )
+            if (connected_count or 0) >= 20:
+                await callback.answer("You can connect up to 20 apps.", show_alert=True)
+                return
+            connection = ConnectedApp(
+                id=str(uuid4()),
+                user_id=user.id,
+                integration_definition_id=definition.id,
+                integration_definition=definition,
+                kind="default",
+                name=definition.name,
+                url=None,
+                enabled=True,
+            )
+            session.add(connection)
+        else:
+            connection = existing
+            connection.integration_definition = definition
+            connection.name = definition.name
+            connection.kind = "default"
+            connection.url = None
+            connection.deleted = False
+            connection.enabled = True
     elif connection:
         if action == "toggle":
+            if not connection.enabled:
+                try:
+                    connection_url(connection)
+                    connection_secret(connection)
+                except ValueError as exc:
+                    await callback.answer(str(exc), show_alert=True)
+                    return
             connection.enabled = not connection.enabled
             if not connection.enabled:
                 await cancel_pending(session, user.id, connection.id)
@@ -153,13 +217,11 @@ async def settings_callback(callback: CallbackQuery, state: FSMContext, session:
             connection.enabled = False
             await cancel_pending(session, user.id, connection.id)
         elif action == "rotate" and connection.kind == "custom":
-            connection.secret_version += 1
-            await session.flush()
+            secret = rotate_custom_secret(connection)
             await callback.message.answer(
-                f"New signing secret. Update your receiver before enabling delivery:\n{connection_secret(connection)}",
+                f"New signing secret. Update your receiver before enabling delivery:\n{secret}",
                 protect_content=True,
             )
-            connection.enabled = False
             await cancel_pending(session, user.id, connection.id)
         elif action in {"test", "retry"}:
             if not connection.enabled:
@@ -197,10 +259,11 @@ async def settings_callback(callback: CallbackQuery, state: FSMContext, session:
         last = await session.scalar(
             select(Delivery).where(Delivery.connection_id == connection.id).order_by(Delivery.created_at.desc()).limit(1)
         )
-        text = (
-            f"{connection.name}\nHost: {urlsplit(connection.url).hostname}\n"
-            f"Notifications: {'on' if connection.enabled else 'off'}"
-        )
+        try:
+            host = urlsplit(connection_url(connection)).hostname
+        except ValueError:
+            host = "unavailable"
+        text = f"{connection.name}\nHost: {host}\nNotifications: {'on' if connection.enabled else 'off'}"
         if last:
             text += f"\nLast delivery: {last.status}" + (f" ({last.last_error})" if last.last_error else "")
         rows = [
@@ -231,11 +294,7 @@ async def add_custom(message: Message, state: FSMContext, session: AsyncSession)
         name, url = text.rsplit(" ", 1)
         if not name or len(name) > 80:
             raise ValueError("Use a name with at most 80 characters.")
-        validate_url(url)
-        connection = ConnectedApp(
-            id=str(uuid4()), user_id=user.id, name=name, kind="custom", url=url, secret_version=1, enabled=False
-        )
-        secret = connection_secret(connection)
+        url = validate_url(url)
     except ValueError as exc:
         await message.answer(str(exc) if " " in text else "Send a name followed by the HTTPS URL.")
         return
@@ -250,6 +309,11 @@ async def add_custom(message: Message, state: FSMContext, session: AsyncSession)
     )
     if len(connections) >= 20:
         await message.answer("You can connect up to 20 apps.")
+        return
+    try:
+        connection, secret = create_custom_connection(user_id=user.id, name=name, url=url)
+    except ValueError as exc:
+        await message.answer(str(exc))
         return
     session.add(connection)
     await session.commit()

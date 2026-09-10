@@ -10,6 +10,8 @@ from app.core.config import settings
 from app.db import repositories as repo
 from app.db.enums import AccessStatus, UserRole
 from app.db.session import SessionLocal
+from app.integrations.catalog import TRENCHBOOK_BASE_URL, configure_trenchbook
+from app.integrations.secrets import generate_encryption_key
 
 app = typer.Typer(help="Price alert bot admin CLI.")
 
@@ -83,6 +85,40 @@ def suspend(telegram_id: int = typer.Option(..., help="Telegram numeric user ID.
             )
             await session.commit()
         typer.echo(f"User suspended: {user.telegram_id}")
+
+    asyncio.run(run())
+
+
+@app.command()
+def generate_integration_key() -> None:
+    """Generate the master key used to encrypt integration secrets."""
+    typer.echo(f"INTEGRATION_SECRETS_KEY={generate_encryption_key()}")
+
+
+@app.command()
+def configure_trenchbook_integration(
+    base_url: str = typer.Option(TRENCHBOOK_BASE_URL, help="Public Trenchbook base URL."),
+    rotate_secret: bool = typer.Option(False, help="Replace the receiver secret and pause existing connections."),
+) -> None:
+    """Create or update the built-in Trenchbook integration."""
+
+    async def run() -> None:
+        try:
+            async with SessionLocal() as session, session.begin():
+                definition, secret = await configure_trenchbook(
+                    session,
+                    base_url=base_url,
+                    rotate_secret=rotate_secret,
+                )
+        except ValueError as exc:
+            raise typer.BadParameter(str(exc)) from exc
+
+        typer.echo(f"Configured {definition.name} at {definition.base_url}{definition.webhook_path}.")
+        if secret:
+            typer.echo("Copy this value to Trenchbook. It will not be shown again:")
+            typer.echo(f"PRICEBIRD_WEBHOOK_SECRET={secret}")
+        else:
+            typer.echo("The existing signing secret was preserved. Use --rotate-secret to replace it.")
 
     asyncio.run(run())
 
