@@ -4,26 +4,32 @@ from types import SimpleNamespace
 import pytest
 
 from app.db.enums import AssetType
+from app.providers.base import ProviderConfigurationError
 from app.providers.opensea import OpenSeaNftProvider
+from app.providers.opensea_mapping import slug_variants
 
 
 @pytest.mark.asyncio
-async def test_search_assets_maps_opensea_collection(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_search_assets_maps_opensea_search_results(monkeypatch: pytest.MonkeyPatch) -> None:
     provider = OpenSeaNftProvider(base_url="https://example.test", api_key="key")
 
-    async def fake_get_json(path: str, *, params: dict[str, str]) -> dict:
+    async def fake_get_json(path: str, *, params: dict[str, str], missing_ok: bool = False) -> dict:
         assert path == "/api/v2/search"
         assert params["query"] == "bayc"
         assert params["chains"] == "ethereum"
         assert params["asset_types"] == "collection"
         return {
-            "collections": [
+            "results": [
                 {
-                    "collection": "boredapeyachtclub",
-                    "name": "Bored Ape Yacht Club",
-                    "chain": "ethereum",
-                    "image_url": "https://example.test/bayc.png",
-                }
+                    "type": "collection",
+                    "collection": {
+                        "collection": "boredapeyachtclub",
+                        "name": "Bored Ape Yacht Club",
+                        "image_url": "https://example.test/bayc.png",
+                        "is_disabled": False,
+                    },
+                },
+                {"type": "collection", "collection": {"collection": "spam", "is_disabled": True}},
             ]
         }
 
@@ -39,10 +45,43 @@ async def test_search_assets_maps_opensea_collection(monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.asyncio
+async def test_search_falls_back_to_slug_lookup_when_key_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    provider = OpenSeaNftProvider(base_url="https://example.test", api_key="expired")
+
+    async def fake_get_json(path: str, *, params: dict[str, str], missing_ok: bool = False) -> dict | None:
+        if path == "/api/v2/search":
+            raise ProviderConfigurationError("expired")
+        assert missing_ok is True
+        if path == "/api/v2/collections/pudgypenguins":
+            return {"collection": "pudgypenguins", "name": "Pudgy Penguins"}
+        return None
+
+    monkeypatch.setattr(provider, "_get_json", fake_get_json)
+
+    candidates = await provider.search_assets("Pudgy Penguins", nft=True)
+
+    assert [candidate.provider_asset_id for candidate in candidates] == ["pudgypenguins"]
+
+
+@pytest.mark.asyncio
+async def test_search_reports_rejected_key_when_slug_lookup_finds_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    provider = OpenSeaNftProvider(base_url="https://example.test", api_key="")
+
+    async def fake_get_json(path: str, *, params: dict[str, str], missing_ok: bool = False) -> dict | None:
+        assert path.startswith("/api/v2/collections/")
+        return None
+
+    monkeypatch.setattr(provider, "_get_json", fake_get_json)
+
+    with pytest.raises(ProviderConfigurationError, match="OPENSEA_API_KEY"):
+        await provider.search_assets("unknown", nft=True)
+
+
+@pytest.mark.asyncio
 async def test_get_price_converts_native_floor_to_usd(monkeypatch: pytest.MonkeyPatch) -> None:
     provider = OpenSeaNftProvider(base_url="https://example.test", api_key="key")
 
-    async def fake_get_json(path: str, *, params: dict[str, str]) -> dict:
+    async def fake_get_json(path: str, *, params: dict[str, str], missing_ok: bool = False) -> dict:
         assert path == "/api/v2/collections/boredapeyachtclub/stats"
         return {"total": {"floor_price": 12.5}}
 
@@ -61,9 +100,6 @@ async def test_get_price_converts_native_floor_to_usd(monkeypatch: pytest.Monkey
     assert quote.source == "opensea"
 
 
-@pytest.mark.asyncio
-async def test_opensea_requires_api_key() -> None:
-    provider = OpenSeaNftProvider(base_url="https://example.test", api_key="")
-
-    with pytest.raises(RuntimeError, match="OPENSEA_API_KEY"):
-        await provider.search_assets("bayc", nft=True)
+def test_slug_variants_cover_hyphenated_and_joined_forms() -> None:
+    assert slug_variants("Pudgy Penguins") == ["pudgy-penguins", "pudgypenguins"]
+    assert slug_variants("milady") == ["milady"]

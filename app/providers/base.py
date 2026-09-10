@@ -31,6 +31,10 @@ class PriceQuote:
     market_cap_usd: Decimal | None = None
 
 
+class ProviderConfigurationError(RuntimeError):
+    pass
+
+
 class PriceProvider(Protocol):
     name: str
 

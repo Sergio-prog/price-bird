@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from decimal import Decimal
 from typing import Any
 
@@ -40,6 +41,30 @@ def candidate_from_collection(collection: dict[str, Any], *, provider_name: str)
         },
         links=links,
     )
+
+
+def collections_from_search(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    results = payload.get("results")
+    if isinstance(results, list):
+        return [
+            result["collection"]
+            for result in results
+            if isinstance(result, dict)
+            and result.get("type", "collection") == "collection"
+            and isinstance(result.get("collection"), dict)
+            and not result["collection"].get("is_disabled")
+        ]
+    collections = payload.get("collections") or payload.get("collection") or []
+    if isinstance(collections, dict):
+        collections = [collections]
+    return [collection for collection in collections if isinstance(collection, dict)]
+
+
+def slug_variants(query: str) -> list[str]:
+    normalized = query.strip().lower()
+    hyphenated = re.sub(r"[^a-z0-9-]", "", re.sub(r"\s+", "-", normalized)).strip("-")
+    joined = re.sub(r"[^a-z0-9]", "", normalized)
+    return [slug for slug in dict.fromkeys([hyphenated, joined]) if slug]
 
 
 def floor_price(payload: dict[str, Any]) -> Decimal | None:

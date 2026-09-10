@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     reservoir_base_url: str = Field(default="https://api.reservoir.tools", alias="RESERVOIR_BASE_URL")
     reservoir_api_key: str = Field(default="", alias="RESERVOIR_API_KEY")
 
-    nft_providers: str = Field(default="opensea,reservoir", alias="NFT_PROVIDERS")
+    nft_providers: str = Field(default="opensea", alias="NFT_PROVIDERS")
     opensea_base_url: str = Field(default="https://api.opensea.io", alias="OPENSEA_BASE_URL")
     opensea_api_key: str = Field(default="", alias="OPENSEA_API_KEY")
     opensea_chain: str = Field(default="ethereum", alias="OPENSEA_CHAIN")

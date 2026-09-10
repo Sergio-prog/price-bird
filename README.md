@@ -59,8 +59,11 @@ docker compose --profile infra up -d --build
 Alerts are grouped by watched asset. The worker refreshes each active asset once per interval,
 stores the snapshot, evaluates all active alerts for that asset, and queues Telegram notifications.
 
-NFT collection floors are provider-backed. Use `NFT_PROVIDERS=opensea,reservoir` for fallback,
-or set a single value like `NFT_PROVIDERS=opensea` if you want exactly one provider.
+NFT collection floors are provider-backed. OpenSea is the default (`NFT_PROVIDERS=opensea`);
+add `reservoir` only if you have a working Reservoir API.
+OpenSea collection search needs a valid `OPENSEA_API_KEY`; keys expire, and an expired key makes
+NFT search fall back to exact collection slugs only (for example `milady`, `pudgypenguins`).
+Floor price polling works without a key.
 
 ## Bot commands
 

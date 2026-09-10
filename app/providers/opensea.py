@@ -8,8 +8,8 @@ import aiohttp
 
 from app.core.config import settings
 from app.db.models import Asset
-from app.providers.base import AssetCandidate, PriceQuote
-from app.providers.opensea_mapping import candidate_from_collection, floor_price
+from app.providers.base import AssetCandidate, PriceQuote, ProviderConfigurationError
+from app.providers.opensea_mapping import candidate_from_collection, collections_from_search, floor_price, slug_variants
 from app.utils.http import sleep_before_retry
 
 
@@ -30,34 +30,27 @@ class OpenSeaNftProvider:
     async def search_assets(self, query: str, *, nft: bool = False) -> list[AssetCandidate]:
         if not nft:
             return []
-        self._ensure_configured()
 
-        payload = await self._get_json(
-            "/api/v2/search",
-            params={
-                "query": query,
-                "chains": settings.opensea_chain,
-                "asset_types": "collection",
-                "limit": "10",
-            },
-        )
-        collections = payload.get("collections") or payload.get("collection") or []
-        if isinstance(collections, dict):
-            collections = [collections]
-
-        candidates: list[AssetCandidate] = []
-        for collection in collections:
+        configuration_error: ProviderConfigurationError | None = None
+        if self.api_key:
             try:
-                candidates.append(candidate_from_collection(collection, provider_name=self.name))
-            except ValueError:
-                continue
-        return candidates
+                candidates = await self._search_collections(query)
+            except ProviderConfigurationError as exc:
+                configuration_error = exc
+            else:
+                if candidates:
+                    return candidates
+        else:
+            configuration_error = ProviderConfigurationError("OPENSEA_API_KEY is missing; only exact collection slugs work")
+
+        candidates = await self._lookup_by_slug(query)
+        if candidates or configuration_error is None:
+            return candidates
+        raise configuration_error
 
     async def get_price(self, asset: Asset) -> PriceQuote:
-        self._ensure_configured()
-
         stats = await self._get_json(f"/api/v2/collections/{asset.provider_asset_id}/stats", params={})
-        floor_native = floor_price(stats)
+        floor_native = floor_price(stats or {})
         if floor_native is None:
             raise LookupError(f"No OpenSea floor price found for {asset.symbol}")
 
@@ -76,8 +69,43 @@ class OpenSeaNftProvider:
             },
         )
 
-    async def _get_json(self, path: str, *, params: dict[str, str]) -> dict[str, Any]:
-        headers = {"accept": "application/json", "x-api-key": self.api_key}
+    async def _search_collections(self, query: str) -> list[AssetCandidate]:
+        payload = await self._get_json(
+            "/api/v2/search",
+            params={
+                "query": query,
+                "chains": settings.opensea_chain,
+                "asset_types": "collection",
+                "limit": "10",
+            },
+        )
+        candidates: list[AssetCandidate] = []
+        for collection in collections_from_search(payload or {}):
+            try:
+                candidates.append(candidate_from_collection(collection, provider_name=self.name))
+            except ValueError:
+                continue
+        return candidates
+
+    async def _lookup_by_slug(self, query: str) -> list[AssetCandidate]:
+        candidates: list[AssetCandidate] = []
+        for slug in slug_variants(query):
+            try:
+                collection = await self._get_json(f"/api/v2/collections/{slug}", params={}, missing_ok=True)
+            except ProviderConfigurationError:
+                continue
+            if not collection:
+                continue
+            try:
+                candidates.append(candidate_from_collection(collection, provider_name=self.name))
+            except ValueError:
+                continue
+        return candidates
+
+    async def _get_json(self, path: str, *, params: dict[str, str], missing_ok: bool = False) -> dict[str, Any] | None:
+        headers = {"accept": "application/json"}
+        if self.api_key:
+            headers["x-api-key"] = self.api_key
         timeout = aiohttp.ClientTimeout(total=settings.provider_timeout_seconds)
         url = f"{self.base_url}{path}"
         last_error: Exception | None = None
@@ -88,6 +116,12 @@ class OpenSeaNftProvider:
                         if response.status == 429 or 500 <= response.status < 600:
                             await sleep_before_retry(response, attempt)
                             continue
+                        if response.status in {401, 403}:
+                            raise ProviderConfigurationError(
+                                f"OpenSea rejected the API key ({response.status}); renew OPENSEA_API_KEY"
+                            )
+                        if missing_ok and response.status in {400, 404}:
+                            return None
                         response.raise_for_status()
                         return await response.json()
                 except (aiohttp.ClientError, TimeoutError) as exc:
@@ -112,7 +146,3 @@ class OpenSeaNftProvider:
         if price is None:
             raise LookupError(f"No CEX price for {self.eth_usd_symbol}")
         return Decimal(str(price))
-
-    def _ensure_configured(self) -> None:
-        if not self.api_key:
-            raise RuntimeError("OPENSEA_API_KEY is required when NFT_PROVIDER=opensea")
