@@ -40,3 +40,24 @@ def test_market_cap_uses_actual_metric_and_missing_data_does_not_rearm():
     result = evaluate_alert(alert, Decimal("1"), None)
     assert not result.triggered
     assert result.direction is None
+
+
+def test_native_price_threshold_uses_native_quote():
+    alert = DummyAlert()
+    alert.type = AlertType.PRICE_BELOW.value
+    alert.threshold_value = Decimal("0.8")
+    alert.threshold_currency = "ETH"
+    assert evaluate_alert(alert, Decimal("3000"), None, Decimal("0.75")).triggered
+    assert not evaluate_alert(alert, Decimal("3000"), None, Decimal("0.9")).triggered
+    result = evaluate_alert(alert, Decimal("3000"), None, None)
+    assert not result.triggered
+    assert result.direction is None
+
+
+def test_native_market_cap_converts_from_usd():
+    alert = DummyAlert()
+    alert.type = AlertType.MCAP_ABOVE.value
+    alert.threshold_value = Decimal("1000")
+    alert.threshold_currency = "SOL"
+    assert evaluate_alert(alert, Decimal("100"), Decimal("200000"), Decimal("0.5")).triggered
+    assert not evaluate_alert(alert, Decimal("100"), Decimal("100000"), Decimal("0.5")).triggered

@@ -6,13 +6,15 @@ from decimal import Decimal
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.alerts.evaluator import evaluate_alert
-from app.alerts.formatting import format_decimal, format_percent
+from app.alerts.formatting import format_percent, format_threshold
 from app.alerts.parser import ParsedAlertCommand
 from app.db import repositories as repo
 from app.db.enums import AlertType, AssetType
 from app.db.models import Alert, Asset
 from app.delivery.events import queue_event
 from app.providers.registry import provider_registry
+from app.utils.amounts import resolve_currency
+from app.utils.currency import canonical_symbol
 
 
 async def create_alert_from_command(
@@ -37,6 +39,7 @@ async def create_alert_from_command(
         quote.market_cap_usd is None or quote.market_cap_usd <= 0
     ):
         raise ValueError("Actual market cap is unavailable for this asset")
+    threshold_currency = threshold_currency_for(parsed, selected_asset, quote)
     await repo.create_snapshot(
         session,
         asset_id=selected_asset.id,
@@ -55,7 +58,16 @@ async def create_alert_from_command(
         threshold_value=parsed.threshold_value,
         direction=parsed.direction.value,
         repeat=repeat,
+        threshold_currency=threshold_currency,
     )
+
+
+def threshold_currency_for(parsed: ParsedAlertCommand, asset: Asset, quote) -> str:
+    if parsed.alert_type == AlertType.PERCENT_CHANGE:
+        return "USD"
+    native_symbol = canonical_symbol(quote.native_symbol) if quote.price_native else None
+    default = native_symbol if native_symbol and asset.type == AssetType.NFT_COLLECTION.value else "USD"
+    return resolve_currency(parsed.threshold_currency, default=default, native_symbol=native_symbol)
 
 
 async def refresh_and_evaluate_asset(session: AsyncSession, asset: Asset) -> list[int]:
@@ -76,7 +88,7 @@ async def refresh_and_evaluate_asset(session: AsyncSession, asset: Asset) -> lis
         if alert.expires_at is not None and alert.expires_at <= datetime.now(UTC):
             alert.status = "paused"
             continue
-        result = evaluate_alert(alert, quote.price_usd, quote.market_cap_usd)
+        result = evaluate_alert(alert, quote.price_usd, quote.market_cap_usd, quote.price_native)
         if not repo.has_bot_access(alert.user):
             continue
         # Unavailable metrics cannot rearm an alert.
@@ -108,17 +120,20 @@ async def refresh_and_evaluate_asset(session: AsyncSession, asset: Asset) -> lis
 
 def describe_alert(alert: Alert) -> str:
     symbol = alert.asset.symbol if alert.asset else "asset"
+    threshold = format_threshold(alert.type, alert.threshold_value, alert_currency(alert))
     if alert.type == "percent_change":
         return f"{symbol} moves {format_percent(alert.threshold_value)} up or down"
     if alert.type == "price_above":
-        return f"{symbol} above ${format_decimal(alert.threshold_value)}"
+        return f"{symbol} above {threshold}"
     if alert.type == "price_below":
-        return f"{symbol} below ${format_decimal(alert.threshold_value)}"
+        return f"{symbol} below {threshold}"
     if alert.type in {"mcap_above", "mcap_below"}:
-        return (
-            f"{symbol} market cap {'above' if alert.type == 'mcap_above' else 'below'} ${format_decimal(alert.threshold_value)}"
-        )
-    return f"{symbol} absolute change ${format_decimal(alert.threshold_value)}"
+        return f"{symbol} market cap {'above' if alert.type == 'mcap_above' else 'below'} {threshold}"
+    return f"{symbol} absolute change {threshold}"
+
+
+def alert_currency(alert: Alert) -> str:
+    return getattr(alert, "threshold_currency", None) or "USD"
 
 
 def asset_kind_label(asset: Asset) -> str:

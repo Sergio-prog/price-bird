@@ -124,6 +124,7 @@ class Alert(Base):
     status: Mapped[str] = mapped_column(String(32), default=AlertStatus.ACTIVE.value, server_default=AlertStatus.ACTIVE.value)
     baseline_price: Mapped[Decimal] = mapped_column(Numeric(78, 36))
     threshold_value: Mapped[Decimal] = mapped_column(Numeric(78, 36))
+    threshold_currency: Mapped[str] = mapped_column(String(16), default="USD", server_default="USD")
     direction: Mapped[str] = mapped_column(String(32), default=AlertDirection.BOTH.value)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     triggered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

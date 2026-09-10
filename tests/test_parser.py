@@ -33,3 +33,20 @@ def test_nft_floor_percent() -> None:
 def test_invalid_condition() -> None:
     with pytest.raises(ValueError):
         parse_alert_command("/alert BTC soon")
+
+
+def test_threshold_with_suffix_and_currency() -> None:
+    parsed = parse_alert_command("/alert BTC > 100k")
+    assert parsed.threshold_value == Decimal("100000")
+    assert parsed.threshold_currency is None
+
+    parsed = parse_alert_command("/alert milady floor < 0.8 ETH")
+    assert parsed.query == "milady"
+    assert parsed.asset_type_hint == AssetType.NFT_COLLECTION
+    assert parsed.alert_type == AlertType.PRICE_BELOW
+    assert parsed.threshold_value == Decimal("0.8")
+    assert parsed.threshold_currency == "ETH"
+
+    parsed = parse_alert_command("/alert pudgy penguins > $50000")
+    assert parsed.query == "pudgy penguins"
+    assert parsed.threshold_currency == "USD"

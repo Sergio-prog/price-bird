@@ -86,3 +86,25 @@ async def _run_refresh(monkeypatch: pytest.MonkeyPatch, alert, calls: list[str])
     event_ids = await service.refresh_and_evaluate_asset(object(), asset)
 
     assert event_ids == [30]
+
+
+def test_threshold_currency_defaults_to_native_for_nft_only() -> None:
+    from app.alerts.parser import ParsedAlertCommand
+    from app.alerts.service import threshold_currency_for
+
+    parsed = ParsedAlertCommand(
+        query="",
+        asset_type_hint=None,
+        alert_type=AlertType.PRICE_BELOW,
+        threshold_value=Decimal("1"),
+        direction=AlertDirection.DOWN,
+    )
+    quote = PriceQuote(price_usd=Decimal("3000"), source="t", raw={}, price_native=Decimal("1"), native_symbol="ETH")
+    assert threshold_currency_for(parsed, SimpleNamespace(type="nft_collection"), quote) == "ETH"
+    assert threshold_currency_for(parsed, SimpleNamespace(type="token"), quote) == "USD"
+    usd_quote = PriceQuote(price_usd=Decimal("3000"), source="t", raw={})
+    assert threshold_currency_for(parsed, SimpleNamespace(type="nft_collection"), usd_quote) == "USD"
+    explicit = ParsedAlertCommand(**{**parsed.__dict__, "threshold_currency": "ETH"})
+    assert threshold_currency_for(explicit, SimpleNamespace(type="token"), quote) == "ETH"
+    with pytest.raises(ValueError):
+        threshold_currency_for(explicit, SimpleNamespace(type="token"), usd_quote)

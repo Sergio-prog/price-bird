@@ -6,9 +6,9 @@ from html import escape
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.alerts.formatting import format_decimal, format_percent
+from app.alerts.formatting import format_decimal, format_percent, format_threshold
 from app.alerts.parser import ParsedAlertCommand
-from app.alerts.service import asset_kind_label, create_alert_from_command
+from app.alerts.service import alert_currency, asset_kind_label, create_alert_from_command
 from app.bot.keyboards import alert_created_keyboard
 from app.db import repositories as repo
 from app.db.enums import AlertDirection, AlertType, AssetType
@@ -63,7 +63,7 @@ async def create_alert_from_candidate(
             [
                 f"✅ <b>{escape(asset.symbol)}</b> is now on your watchlist.",
                 "",
-                f"Trigger: {_format_condition(parsed)}",
+                f"Trigger: {_format_condition(parsed, alert_currency(alert))}",
                 f"Baseline: ${format_decimal(alert.baseline_price)}",
                 f"Market: {asset_kind_label(asset)}",
                 f"Mode: {'repeat' if alert.repeat else 'one time'}",
@@ -168,13 +168,14 @@ async def _send_result(
     await message.answer(text, reply_markup=reply_markup, parse_mode=parse_mode)
 
 
-def _format_condition(parsed: ParsedAlertCommand) -> str:
+def _format_condition(parsed: ParsedAlertCommand, currency: str) -> str:
+    threshold = format_threshold(parsed.alert_type.value, parsed.threshold_value, currency)
     if parsed.alert_type == AlertType.PERCENT_CHANGE:
         return f"Moves {format_percent(parsed.threshold_value)} up or down"
     if parsed.alert_type == AlertType.PRICE_ABOVE:
-        return f"Price goes above ${format_decimal(parsed.threshold_value)}"
+        return f"Price goes above {threshold}"
     if parsed.alert_type == AlertType.PRICE_BELOW:
-        return f"Price goes below ${format_decimal(parsed.threshold_value)}"
+        return f"Price goes below {threshold}"
     if parsed.alert_type in {AlertType.MCAP_ABOVE, AlertType.MCAP_BELOW}:
-        return f"Market cap {parsed.direction.value}: ${format_decimal(parsed.threshold_value)}"
+        return f"Market cap {parsed.direction.value}: {threshold}"
     return "Price alert"

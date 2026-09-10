@@ -4,7 +4,7 @@ from math import ceil
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from app.alerts.formatting import format_compact_usd, format_decimal, format_direction_arrows, format_percent
+from app.alerts.formatting import format_direction_arrows, format_percent, format_threshold
 from app.db.enums import AlertStatus, AlertType
 from app.db.models import Alert
 from app.providers.base import AssetCandidate
@@ -69,12 +69,16 @@ def alert_type_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def threshold_keyboard(alert_type: str, *, one_time: bool = True) -> InlineKeyboardMarkup:
+def threshold_keyboard(
+    alert_type: str, *, one_time: bool = True, currency: str = "USD", native_symbol: str | None = None
+) -> InlineKeyboardMarkup:
     rows = []
     if alert_type == "percent":
         rows.append([InlineKeyboardButton(text="Default (10.00%)", callback_data="threshold:default_percent")])
     if alert_type.startswith("mcap_"):
         rows.append([InlineKeyboardButton(text=one_time_label(one_time), callback_data="threshold:toggle_once")])
+    if alert_type != "percent" and native_symbol:
+        rows.append([InlineKeyboardButton(text=f"Currency: {currency}", callback_data="threshold:toggle_currency")])
     rows.append(_wizard_nav_row())
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -117,19 +121,21 @@ def alert_list_keyboard(alerts: list[Alert], *, page: int = 1, page_size: int = 
 
 def alert_button_label(alert: Alert, index: int) -> str:
     symbol = alert.asset.symbol if alert.asset else "asset"
-    threshold = alert.threshold_value
+    currency = getattr(alert, "threshold_currency", None) or "USD"
+    exact = format_threshold(alert.type, alert.threshold_value, currency)
+    compact = format_threshold(alert.type, alert.threshold_value, currency, compact=True)
     if alert.type == AlertType.PERCENT_CHANGE.value:
-        condition = f"{format_percent(threshold)} {format_direction_arrows(alert.direction)}"
+        condition = f"{format_percent(alert.threshold_value)} {format_direction_arrows(alert.direction)}"
     elif alert.type == AlertType.PRICE_ABOVE.value:
-        condition = f"> ${format_decimal(threshold)}"
+        condition = f"> {exact}"
     elif alert.type == AlertType.PRICE_BELOW.value:
-        condition = f"< ${format_decimal(threshold)}"
+        condition = f"< {exact}"
     elif alert.type == AlertType.MCAP_ABOVE.value:
-        condition = f"MC > {format_compact_usd(threshold)}"
+        condition = f"MC > {compact}"
     elif alert.type == AlertType.MCAP_BELOW.value:
-        condition = f"MC < {format_compact_usd(threshold)}"
+        condition = f"MC < {compact}"
     else:
-        condition = f"±${format_decimal(threshold)}"
+        condition = f"±{exact}"
     label = f"{index}. {symbol} {condition}"
     if alert.status == AlertStatus.PAUSED.value:
         label += " ⏸"

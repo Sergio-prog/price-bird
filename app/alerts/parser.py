@@ -5,9 +5,10 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 
 from app.db.enums import AlertDirection, AlertType, AssetType
+from app.utils.amounts import parse_amount
 
 _PERCENT_RE = re.compile(r"^(?P<value>\d+(?:\.\d+)?)%$")
-_THRESHOLD_RE = re.compile(r"^(?P<op>[<>])\s*(?P<value>\d+(?:\.\d+)?)$")
+_THRESHOLD_RE = re.compile(r"^(?P<op>[<>])\s*(?P<amount>.+)$")
 
 
 @dataclass(frozen=True)
@@ -17,6 +18,7 @@ class ParsedAlertCommand:
     alert_type: AlertType
     threshold_value: Decimal
     direction: AlertDirection
+    threshold_currency: str | None = None
 
 
 def parse_alert_command(text: str) -> ParsedAlertCommand:
@@ -35,9 +37,10 @@ def parse_alert_command(text: str) -> ParsedAlertCommand:
         query = " ".join(parts[:-1]).strip()
         condition_parts = parts[-1:]
         asset_type_hint = None
-        if len(parts) >= 3 and parts[-2] in {">", "<"}:
-            query = " ".join(parts[:-2]).strip()
-            condition_parts = parts[-2:]
+        operator_index = next((index for index, part in enumerate(parts) if part in {">", "<"}), None)
+        if operator_index:
+            query = " ".join(parts[:operator_index]).strip()
+            condition_parts = parts[operator_index:]
 
     if not query or not condition_parts:
         raise ValueError("Missing asset query or alert condition")
@@ -56,15 +59,17 @@ def parse_alert_command(text: str) -> ParsedAlertCommand:
     threshold_match = _THRESHOLD_RE.match(condition)
     if threshold_match:
         op = threshold_match.group("op")
+        value, currency = parse_amount(threshold_match.group("amount"))
         return ParsedAlertCommand(
             query=query,
             asset_type_hint=asset_type_hint,
             alert_type=AlertType.PRICE_ABOVE if op == ">" else AlertType.PRICE_BELOW,
-            threshold_value=_decimal(threshold_match.group("value")),
+            threshold_value=value,
             direction=AlertDirection.UP if op == ">" else AlertDirection.DOWN,
+            threshold_currency=currency,
         )
 
-    raise ValueError("Condition must be a percent like 10% or threshold like > 70000")
+    raise ValueError("Condition must be a percent like 10% or threshold like > 70000, > 100k or < 0.8 ETH")
 
 
 def _decimal(value: str) -> Decimal:

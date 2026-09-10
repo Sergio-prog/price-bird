@@ -7,6 +7,7 @@ from typing import Any
 from app.core.config import settings
 from app.db.enums import AssetType
 from app.providers.base import AssetCandidate
+from app.utils.currency import chain_native_symbol
 from app.utils.parsing import to_decimal
 
 
@@ -38,6 +39,7 @@ def candidate_from_collection(collection: dict[str, Any], *, provider_name: str)
             "description": collection.get("description"),
             "chain": chain_name(collection),
             "source": provider_name,
+            "native_symbol": chain_native_symbol(chain_name(collection)) or "ETH",
         },
         links=links,
     )

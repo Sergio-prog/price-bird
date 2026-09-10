@@ -77,6 +77,10 @@ Floor price polling works without a key.
 
 Price Bird is the only place to create and manage alerts. `/settings` controls where notifications go. Enable Price Bird, Trenchbook, custom webhooks, or several destinations. Disabling a destination cancels its pending deliveries; a request already in flight can still finish. Alert evaluation continues. `/alerts` lets you pause individual alerts, edit their threshold/note, change percentage direction, choose once or repeating crossings, set cooldown, or expire an alert in seven days.
 
+Price and market-cap thresholds accept `100k`, `23m`, `1b` shortcuts and an optional unit (`$0.023`, `1.2 ETH`).
+Assets quoted in a native currency (NFT floors, DEX pairs against ETH/SOL/BNB) can use that currency instead of USD;
+NFT floor thresholds default to the native currency, everything else defaults to USD.
+
 Repeated alerts rearm after the condition becomes false. They do not repeatedly notify while a price stays beyond its threshold. Price and percentage baselines use real quotes. Market-cap alerts use actual market cap, never FDV. Missing prices or metrics do not trigger or rearm an alert.
 
 Built-in integration definitions live in Postgres. Each definition owns its display name, base URL, webhook path, enabled state and encrypted receiver secret. The application environment contains only `INTEGRATION_SECRETS_KEY`, the master encryption key. Keep that key stable and backed up; losing it makes existing integration secrets unreadable.

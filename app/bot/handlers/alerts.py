@@ -46,6 +46,8 @@ from app.db import repositories as repo
 from app.db.enums import AlertDirection, AlertType, AssetType
 from app.providers.base import ProviderConfigurationError
 from app.providers.registry import provider_registry
+from app.utils.amounts import parse_amount, resolve_currency
+from app.utils.currency import native_symbol_or_none
 
 router = Router(name="alerts")
 logger = logging.getLogger(__name__)
@@ -328,26 +330,36 @@ async def wizard_back_to_type(callback: CallbackQuery, state: FSMContext) -> Non
 @router.callback_query(AlertWizard.waiting_type, F.data.startswith("alert_type:"))
 async def wizard_type(callback: CallbackQuery, state: FSMContext) -> None:
     value = (callback.data or "").split(":", 1)[1]
-    await state.update_data(alert_type=value, one_time=True)
+    data = await state.get_data()
+    candidate = candidate_from_dict(data["selected_candidate"])
+    native_symbol = native_symbol_or_none(candidate.metadata.get("native_symbol"))
+    currency = native_symbol if native_symbol and candidate.type == AssetType.NFT_COLLECTION else "USD"
+    await state.update_data(alert_type=value, one_time=True, currency=currency, native_symbol=native_symbol)
     await state.set_state(AlertWizard.waiting_threshold)
     if isinstance(callback.message, Message):
-        data = await state.get_data()
-        candidate = candidate_from_dict(data["selected_candidate"])
-        await callback.message.edit_text(
-            threshold_prompt(asset_label=_candidate_display(candidate), alert_type=value),
-            reply_markup=threshold_keyboard(value, one_time=True),
-            parse_mode="HTML",
-        )
+        await _render_threshold_step(callback.message, await state.get_data())
     await callback.answer()
 
 
 @router.callback_query(AlertWizard.waiting_threshold, F.data == "threshold:toggle_once")
 async def wizard_toggle_once(callback: CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
-    one_time = not data.get("one_time", True)
-    await state.update_data(one_time=one_time)
+    await state.update_data(one_time=not data.get("one_time", True))
     if isinstance(callback.message, Message):
-        await callback.message.edit_reply_markup(reply_markup=threshold_keyboard(data["alert_type"], one_time=one_time))
+        await callback.message.edit_reply_markup(reply_markup=_threshold_keyboard(await state.get_data()))
+    await callback.answer()
+
+
+@router.callback_query(AlertWizard.waiting_threshold, F.data == "threshold:toggle_currency")
+async def wizard_toggle_currency(callback: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    native_symbol = data.get("native_symbol")
+    if not native_symbol:
+        await callback.answer("This asset is priced in USD only")
+        return
+    await state.update_data(currency=native_symbol if data.get("currency", "USD") == "USD" else "USD")
+    if isinstance(callback.message, Message):
+        await _render_threshold_step(callback.message, await state.get_data())
     await callback.answer()
 
 
@@ -372,16 +384,23 @@ async def wizard_default_threshold(callback: CallbackQuery, state: FSMContext, s
 @router.message(AlertWizard.waiting_threshold)
 async def wizard_threshold(message: Message, state: FSMContext, session: AsyncSession) -> None:
     data = await state.get_data()
+    text = (message.text or "").strip()
     try:
-        threshold = Decimal((message.text or "").strip().removesuffix("%"))
+        if data["alert_type"] == "percent":
+            threshold, currency = Decimal(text.removesuffix("%").strip()), "USD"
+        else:
+            threshold, unit = parse_amount(text)
+            currency = resolve_currency(unit, default=data.get("currency", "USD"), native_symbol=data.get("native_symbol"))
+        if not threshold.is_finite() or threshold <= 0 or threshold >= Decimal("1e42"):
+            raise ValueError("Send a valid positive number.")
+    except ValueError as exc:
+        await message.answer(str(exc) or "Send a valid positive number.", reply_markup=wizard_back_keyboard())
+        return
     except Exception:
         await message.answer("Send a valid positive number.", reply_markup=wizard_back_keyboard())
         return
-    if not threshold.is_finite() or threshold <= 0 or threshold >= Decimal("1e42"):
-        await message.answer("Send a valid positive number.", reply_markup=wizard_back_keyboard())
-        return
 
-    parsed = _parsed_threshold(data["alert_type"], threshold)
+    parsed = _parsed_threshold(data["alert_type"], threshold, currency)
     candidate = candidate_from_dict(data["selected_candidate"])
     await create_alert_from_candidate(
         message,
@@ -391,6 +410,30 @@ async def wizard_threshold(message: Message, state: FSMContext, session: AsyncSe
         repeat=_wizard_repeat(data),
     )
     await state.clear()
+
+
+async def _render_threshold_step(message: Message, data: dict) -> None:
+    candidate = candidate_from_dict(data["selected_candidate"])
+    await _edit_message(
+        message,
+        threshold_prompt(
+            asset_label=_candidate_display(candidate),
+            alert_type=data["alert_type"],
+            currency=data.get("currency", "USD"),
+            native_symbol=data.get("native_symbol"),
+        ),
+        reply_markup=_threshold_keyboard(data),
+        parse_mode="HTML",
+    )
+
+
+def _threshold_keyboard(data: dict) -> InlineKeyboardMarkup:
+    return threshold_keyboard(
+        data["alert_type"],
+        one_time=data.get("one_time", True),
+        currency=data.get("currency", "USD"),
+        native_symbol=data.get("native_symbol"),
+    )
 
 
 def alerts_message(alerts: list, *, page: int = 1) -> tuple[str, InlineKeyboardMarkup]:
@@ -488,10 +531,11 @@ def _wizard_repeat(data: dict) -> bool | None:
     return not data.get("one_time", True)
 
 
-def _parsed_threshold(alert_type: str, threshold: Decimal) -> ParsedAlertCommand:
+def _parsed_threshold(alert_type: str, threshold: Decimal, currency: str = "USD") -> ParsedAlertCommand:
     return ParsedAlertCommand(
         query="",
         asset_type_hint=None,
+        threshold_currency=currency,
         alert_type={
             "percent": AlertType.PERCENT_CHANGE,
             "above": AlertType.PRICE_ABOVE,

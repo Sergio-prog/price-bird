@@ -9,6 +9,7 @@ from app.db.enums import AssetType
 from app.db.models import Asset
 from app.providers.base import AssetCandidate, PriceQuote
 from app.providers.dexscreener_mapping import format_pair, format_price, normalize_chain
+from app.utils.currency import native_symbol_or_none
 
 
 class DexScreenerProvider:
@@ -47,6 +48,7 @@ class DexScreenerProvider:
                         "dex_id": pair.get("dexId"),
                         "pair": format_pair(base.get("symbol"), quote.get("symbol")),
                         "price_usd": format_price(pair.get("priceUsd")),
+                        "native_symbol": native_symbol_or_none(quote.get("symbol")),
                     },
                     links={"dexscreener": pair.get("url")} if pair.get("url") else {},
                 )
@@ -63,9 +65,13 @@ class DexScreenerProvider:
         if not pairs:
             raise LookupError(f"No DexScreener pair for {asset.symbol}")
         best = max(pairs, key=lambda pair: float((pair.get("liquidity") or {}).get("usd") or 0))
+        native_symbol = native_symbol_or_none((best.get("quoteToken") or {}).get("symbol"))
+        price_native = best.get("priceNative")
         return PriceQuote(
             price_usd=Decimal(str(best["priceUsd"])),
             source=self.name,
             raw=best,
             market_cap_usd=Decimal(str(best["marketCap"])) if best.get("marketCap") is not None else None,
+            price_native=Decimal(str(price_native)) if native_symbol and price_native is not None else None,
+            native_symbol=native_symbol if native_symbol and price_native is not None else None,
         )

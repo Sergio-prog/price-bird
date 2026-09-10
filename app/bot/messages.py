@@ -95,16 +95,7 @@ def no_matches_message(*, nft: bool) -> str:
     return "No assets found. Try a ticker, contract address, or a shorter name."
 
 
-def threshold_prompt(*, asset_label: str, alert_type: str) -> str:
-    if alert_type.startswith("mcap_"):
-        return "\n".join(
-            [
-                f"<b>{escape(asset_label)}</b>",
-                "",
-                "Enter actual market cap in USD. FDV is not used.",
-                "One time: the alert is removed after it fires once. Otherwise it rearms and repeats.",
-            ]
-        )
+def threshold_prompt(*, asset_label: str, alert_type: str, currency: str = "USD", native_symbol: str | None = None) -> str:
     if alert_type == "percent":
         return "\n".join(
             [
@@ -113,18 +104,34 @@ def threshold_prompt(*, asset_label: str, alert_type: str) -> str:
                 "Enter % price change to receive notifications:",
             ]
         )
+    unit_hint = "Shortcuts: 100k, 23m, 1b. Add a unit to override the currency, e.g. <code>$0.023</code>"
+    if native_symbol:
+        unit_hint += f" or <code>1.2 {escape(native_symbol)}</code>"
+    unit_hint += "."
+    if alert_type.startswith("mcap_"):
+        return "\n".join(
+            [
+                f"<b>{escape(asset_label)}</b>",
+                "",
+                f"Enter actual market cap in {escape(currency)}. FDV is not used.",
+                "One time: the alert is removed after it fires once. Otherwise it rearms and repeats.",
+                unit_hint,
+            ]
+        )
     if alert_type == "above":
         return "\n".join(
             [
                 f"<b>{escape(asset_label)}</b>",
                 "",
-                "Enter USD price that should trigger when market moves above it:",
+                f"Enter {escape(currency)} price that should trigger when market moves above it:",
+                unit_hint,
             ]
         )
     return "\n".join(
         [
             f"<b>{escape(asset_label)}</b>",
             "",
-            "Enter USD price that should trigger when market drops below it:",
+            f"Enter {escape(currency)} price that should trigger when market drops below it:",
+            unit_hint,
         ]
     )

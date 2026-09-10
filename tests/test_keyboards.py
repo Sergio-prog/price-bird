@@ -128,3 +128,20 @@ def test_asset_candidates_keyboard_includes_pair_and_price() -> None:
     assert button.text == "BONK / solana / BONK/SOL / $0.00001823 / dexscreener"
     assert button.callback_data == "asset:0"
     assert keyboard.inline_keyboard[1][0].callback_data == "wizard:back"
+
+
+def test_threshold_keyboard_offers_currency_toggle_only_with_native_symbol() -> None:
+    with_native = threshold_keyboard("above", currency="ETH", native_symbol="ETH")
+    without_native = threshold_keyboard("above")
+
+    assert with_native.inline_keyboard[0][0].text == "Currency: ETH"
+    assert with_native.inline_keyboard[0][0].callback_data == "threshold:toggle_currency"
+    assert without_native.inline_keyboard[0][0].callback_data == "wizard:back"
+    assert threshold_keyboard("percent", native_symbol="ETH").inline_keyboard[1][0].callback_data == "wizard:back"
+
+
+def test_alert_button_label_shows_native_currency() -> None:
+    alert = _alert(1, type="price_below", threshold_value=Decimal("0.8"), threshold_currency="ETH")
+    assert alert_button_label(alert, 1) == "1. MEME < 0.8 ETH"
+    alert = _alert(1, type="mcap_above", threshold_value=Decimal("1500"), threshold_currency="SOL")
+    assert alert_button_label(alert, 2) == "2. MEME MC > 1.5K SOL"

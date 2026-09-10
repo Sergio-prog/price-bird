@@ -28,7 +28,7 @@ def render_payload(payload: dict) -> str:
     return "\n".join(
         [
             f"Alert for <b>{escape(asset['symbol'])}</b>",
-            f"Rule: {escape(rule['type'])} {escape(rule['threshold'])}",
+            f"Rule: {escape(rule['type'])} {escape(rule['threshold'])} {escape(rule.get('threshold_currency') or 'USD')}",
             f"Price: ${escape(observation['price_usd'])}",
             *(
                 [f"Floor: {escape(observation['price_native'])} {escape(observation['native_symbol'] or '')}"]

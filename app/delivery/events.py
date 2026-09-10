@@ -30,6 +30,7 @@ async def queue_event(session: AsyncSession, event: AlertEvent, alert: Alert, as
         "rule": {
             "type": alert.type,
             "threshold": str(alert.threshold_value),
+            "threshold_currency": getattr(alert, "threshold_currency", None) or "USD",
             "baseline": str(alert.baseline_price),
             "direction": alert.direction,
         },
