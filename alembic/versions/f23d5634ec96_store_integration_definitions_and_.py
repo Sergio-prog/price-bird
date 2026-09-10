@@ -54,6 +54,13 @@ def upgrade() -> None:
         ["user_id", "integration_definition_id"],
     )
     op.alter_column("connected_apps", "url", existing_type=sa.Text(), nullable=True)
+    for table, column in (
+        ("alert_events", "alert_id"),
+        ("alerts", "asset_id"),
+        ("alerts", "user_id"),
+        ("price_snapshots", "asset_id"),
+    ):
+        op.create_index(f"ix_{table}_{column}", table, [column])
     # Previous releases derived or read secrets from process environment. They cannot be
     # migrated safely, so require users to reconnect or the operator to adopt Trenchbook
     # connections with the setup command.
@@ -61,6 +68,13 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    for table, column in (
+        ("price_snapshots", "asset_id"),
+        ("alerts", "user_id"),
+        ("alerts", "asset_id"),
+        ("alert_events", "alert_id"),
+    ):
+        op.drop_index(f"ix_{table}_{column}", table_name=table)
     op.execute(
         """
         UPDATE connected_apps AS connection
