@@ -70,10 +70,19 @@ def slug_variants(query: str) -> list[str]:
 
 
 def floor_price(payload: dict[str, Any]) -> Decimal | None:
+    return _stat(payload, "floor_price")
+
+
+def market_cap(payload: dict[str, Any]) -> Decimal | None:
+    value = _stat(payload, "market_cap")
+    return value if value is not None and value > 0 else None
+
+
+def _stat(payload: dict[str, Any], key: str) -> Decimal | None:
     candidates = [
-        ((payload.get("total") or {}).get("floor_price")),
-        payload.get("floor_price"),
-        ((payload.get("stats") or {}).get("floor_price")),
+        ((payload.get("total") or {}).get(key)),
+        payload.get(key),
+        ((payload.get("stats") or {}).get(key)),
     ]
     for candidate in candidates:
         value = to_decimal(candidate)

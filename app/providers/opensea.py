@@ -9,7 +9,13 @@ import aiohttp
 from app.core.config import settings
 from app.db.models import Asset
 from app.providers.base import AssetCandidate, PriceQuote, ProviderConfigurationError
-from app.providers.opensea_mapping import candidate_from_collection, collections_from_search, floor_price, slug_variants
+from app.providers.opensea_mapping import (
+    candidate_from_collection,
+    collections_from_search,
+    floor_price,
+    market_cap,
+    slug_variants,
+)
 from app.utils.http import sleep_before_retry
 
 
@@ -55,10 +61,12 @@ class OpenSeaNftProvider:
             raise LookupError(f"No OpenSea floor price found for {asset.symbol}")
 
         eth_usd = await self._get_eth_usd()
+        market_cap_native = market_cap(stats or {})
         return PriceQuote(
             price_usd=floor_native * eth_usd,
             price_native=floor_native,
             native_symbol="ETH",
+            market_cap_usd=market_cap_native * eth_usd if market_cap_native is not None else None,
             source=self.name,
             raw={
                 **stats,

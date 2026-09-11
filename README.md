@@ -81,7 +81,7 @@ Price and market-cap thresholds accept `100k`, `23m`, `1b` shortcuts and an opti
 Assets quoted in a native currency (NFT floors, DEX pairs against ETH/SOL/BNB) can use that currency instead of USD;
 NFT floor thresholds default to the native currency, everything else defaults to USD.
 
-Repeated alerts rearm after the condition becomes false. They do not repeatedly notify while a price stays beyond its threshold. Price and percentage baselines use real quotes. Market-cap alerts use actual market cap, never FDV. Missing prices or metrics do not trigger or rearm an alert.
+Repeating percentage and absolute-change alerts move their baseline to the trigger price, so the next notification needs another full move from there. Repeating price and market-cap alerts rearm after the condition becomes false and do not notify again while the price stays beyond the threshold. Price and percentage baselines use real quotes. Market-cap alerts use actual market cap, never FDV. Missing prices or metrics do not trigger or rearm an alert.
 
 Built-in integration definitions live in Postgres. Each definition owns its display name, base URL, webhook path, enabled state and encrypted receiver secret. The application environment contains only `INTEGRATION_SECRETS_KEY`, the master encryption key. Keep that key stable and backed up; losing it makes existing integration secrets unreadable.
 

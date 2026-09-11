@@ -29,6 +29,7 @@ async def test_percent_alert_stays_active_after_trigger(monkeypatch: pytest.Monk
 
     assert "event" in calls
     assert "mark_triggered" not in calls
+    assert alert.baseline_price == Decimal("120")
 
 
 @pytest.mark.asyncio

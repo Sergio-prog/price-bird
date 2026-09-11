@@ -16,6 +16,8 @@ from app.providers.registry import provider_registry
 from app.utils.amounts import resolve_currency
 from app.utils.currency import canonical_symbol
 
+MOVE_ALERT_TYPES = {AlertType.PERCENT_CHANGE.value, AlertType.ABSOLUTE_CHANGE.value}
+
 
 async def create_alert_from_command(
     session: AsyncSession,
@@ -114,6 +116,8 @@ async def refresh_and_evaluate_asset(session: AsyncSession, asset: Asset) -> lis
         await queue_event(session, event, alert, asset, quote)
         if not alert.repeat:
             await repo.mark_alert_triggered(session, alert.id)
+        elif alert.type in MOVE_ALERT_TYPES:
+            alert.baseline_price = quote.price_usd
         event_ids.append(event.id)
     return event_ids
 

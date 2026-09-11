@@ -49,9 +49,9 @@ def test_asset_type_keyboard_separates_tokens_and_nfts() -> None:
 def test_alert_list_keyboard_shows_one_button_per_alert() -> None:
     keyboard = alert_list_keyboard([_alert(123), _alert(456, type="price_above", threshold_value=Decimal("100000"))])
 
-    assert keyboard.inline_keyboard[0][0].text == "1. MEME 10.00% ↑↓"
+    assert keyboard.inline_keyboard[0][0].text == "1. MEME 10% ↑↓"
     assert keyboard.inline_keyboard[0][0].callback_data == "alert_config:view:123"
-    assert keyboard.inline_keyboard[1][0].text == "2. MEME > $100000"
+    assert keyboard.inline_keyboard[1][0].text == "2. MEME > $100,000"
     assert keyboard.inline_keyboard[1][0].callback_data == "alert_config:view:456"
     assert keyboard.inline_keyboard[2][0].text == "↩️ Back to menu"
     assert keyboard.inline_keyboard[2][0].callback_data == "wizard:cancel"
@@ -64,23 +64,23 @@ def test_alert_list_keyboard_paginates() -> None:
     second = alert_list_keyboard(alerts, page=2, page_size=5)
     last = alert_list_keyboard(alerts, page=99, page_size=5)
 
-    assert [row[0].text for row in first.inline_keyboard[:5]] == [f"{n}. MEME 10.00% ↑↓" for n in range(1, 6)]
+    assert [row[0].text for row in first.inline_keyboard[:5]] == [f"{n}. MEME 10% ↑↓" for n in range(1, 6)]
     assert [button.text for button in first.inline_keyboard[5]] == ["◀️", "1/3", "▶️"]
     assert first.inline_keyboard[5][0].callback_data == "alerts:noop"
     assert first.inline_keyboard[5][2].callback_data == "alerts:page:2"
-    assert second.inline_keyboard[0][0].text == "6. MEME 10.00% ↑↓"
+    assert second.inline_keyboard[0][0].text == "6. MEME 10% ↑↓"
     assert second.inline_keyboard[5][0].callback_data == "alerts:page:1"
-    assert last.inline_keyboard[0][0].text == "11. MEME 10.00% ↑↓"
+    assert last.inline_keyboard[0][0].text == "11. MEME 10% ↑↓"
     assert last.inline_keyboard[1][1].text == "3/3"
     assert last.inline_keyboard[1][2].callback_data == "alerts:noop"
 
 
 def test_alert_button_label_formats_each_alert_type() -> None:
-    assert alert_button_label(_alert(1, direction="up"), 1) == "1. MEME 10.00% ↑"
+    assert alert_button_label(_alert(1, direction="up"), 1) == "1. MEME 10% ↑"
     assert alert_button_label(_alert(1, type="price_below", threshold_value=Decimal("0.5")), 2) == "2. MEME < $0.5"
     assert alert_button_label(_alert(1, type="mcap_above", threshold_value=Decimal("1500000")), 3) == "3. MEME MC > $1.5M"
     assert alert_button_label(_alert(1, type="mcap_below", threshold_value=Decimal("2000000000")), 4) == "4. MEME MC < $2B"
-    assert alert_button_label(_alert(1, status="paused"), 5) == "5. MEME 10.00% ↑↓ ⏸"
+    assert alert_button_label(_alert(1, status="paused"), 5) == "5. MEME 10% ↑↓ ⏸"
 
 
 def test_back_keyboards_use_expected_callbacks() -> None:
@@ -95,7 +95,7 @@ def test_back_keyboards_use_expected_callbacks() -> None:
 def test_threshold_keyboard_has_default_percent_and_back() -> None:
     keyboard = threshold_keyboard("percent")
 
-    assert keyboard.inline_keyboard[0][0].text == "Default (10.00%)"
+    assert keyboard.inline_keyboard[0][0].text == "Default (10%)"
     assert keyboard.inline_keyboard[0][0].callback_data == "threshold:default_percent"
     assert keyboard.inline_keyboard[1][0].callback_data == "wizard:back"
 

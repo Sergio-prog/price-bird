@@ -83,7 +83,7 @@ async def test_get_price_converts_native_floor_to_usd(monkeypatch: pytest.Monkey
 
     async def fake_get_json(path: str, *, params: dict[str, str], missing_ok: bool = False) -> dict:
         assert path == "/api/v2/collections/boredapeyachtclub/stats"
-        return {"total": {"floor_price": 12.5}}
+        return {"total": {"floor_price": 12.5, "market_cap": 125000}}
 
     async def fake_get_eth_usd() -> Decimal:
         return Decimal("3000")
@@ -97,6 +97,7 @@ async def test_get_price_converts_native_floor_to_usd(monkeypatch: pytest.Monkey
     assert quote.price_usd == Decimal("37500.0")
     assert quote.price_native == Decimal("12.5")
     assert quote.native_symbol == "ETH"
+    assert quote.market_cap_usd == Decimal("375000000")
     assert quote.source == "opensea"
 
 

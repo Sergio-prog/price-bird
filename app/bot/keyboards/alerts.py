@@ -74,7 +74,7 @@ def threshold_keyboard(
 ) -> InlineKeyboardMarkup:
     rows = []
     if alert_type == "percent":
-        rows.append([InlineKeyboardButton(text="Default (10.00%)", callback_data="threshold:default_percent")])
+        rows.append([InlineKeyboardButton(text="Default (10%)", callback_data="threshold:default_percent")])
     if alert_type.startswith("mcap_"):
         rows.append([InlineKeyboardButton(text=one_time_label(one_time), callback_data="threshold:toggle_once")])
     if alert_type != "percent" and native_symbol:

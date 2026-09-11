@@ -70,7 +70,7 @@ async def test_independent_destinations(bird, apps, expected):
 
 
 @pytest.mark.asyncio
-async def test_repeating_alert_requires_rearm_and_cooldown(monkeypatch):
+async def test_repeating_move_alert_rebases_and_respects_cooldown(monkeypatch):
     alert = Alert(
         id=1,
         type="percent_change",
@@ -92,15 +92,18 @@ async def test_repeating_alert_requires_rearm_and_cooldown(monkeypatch):
     monkeypatch.setattr(service, "queue_event", queued)
     asset = SimpleNamespace(id=1)
     assert await service.refresh_and_evaluate_asset(None, asset) == [2]
-    assert await service.refresh_and_evaluate_asset(None, asset) == []
-    quote = PriceQuote(Decimal("105"), "provider", {})
+    assert alert.baseline_price == Decimal("120")
+    quote = PriceQuote(Decimal("121"), "provider", {})
     assert await service.refresh_and_evaluate_asset(None, asset) == []
     assert alert.armed
+    quote = PriceQuote(Decimal("126"), "provider", {})
+    assert await service.refresh_and_evaluate_asset(None, asset) == []
     alert.cooldown_seconds = 900
-    quote = PriceQuote(Decimal("120"), "provider", {})
+    quote = PriceQuote(Decimal("100"), "provider", {})
     assert await service.refresh_and_evaluate_asset(None, asset) == []
     alert.last_triggered_at = datetime(2020, 1, 1, tzinfo=UTC)
     assert await service.refresh_and_evaluate_asset(None, asset) == [2]
+    assert alert.baseline_price == Decimal("100")
     assert queued.await_count == 2
 
 
@@ -144,6 +147,7 @@ def test_render_payload_formats_percent_alert_and_links_source():
                 "type": "percent_change",
                 "threshold": "10.000000000000000000000000000000000000",
                 "threshold_currency": "USD",
+                "baseline": "0.0523",
                 "direction": "both",
             },
             "observation": {
@@ -151,8 +155,9 @@ def test_render_payload_formats_percent_alert_and_links_source():
                 "price_native": "0.05829",
                 "native_symbol": "USDG",
                 "source": "dexscreener",
+                "market_cap_usd": "1000000",
             },
-            "trigger": {"percent_change": "11.4532"},
+            "trigger": {"direction": "up", "percent_change": "11.4532"},
             "links": {
                 "dexscreener": "https://dexscreener.com/solana/token",
                 "tradingview": "https://www.tradingview.com/search/?query=MEME",
@@ -160,11 +165,11 @@ def test_render_payload_formats_percent_alert_and_links_source():
         }
     )
 
-    assert message.startswith("🔔 <b>Alert for MEME</b>\n\n")
-    assert "<b>Rule:</b> 10.00% move up or down" in message
-    assert "<b>Price:</b> $0.05829" in message
-    assert "Floor:" not in message
-    assert "<b>Change:</b> +11.45%\n\n" in message
+    assert message.startswith("🔔 <b>MEME</b> ↑ +11.45%\n\n")
+    assert "<b>Rule:</b> 10% move up or down" in message
+    assert "<b>Price:</b> $0.05829\n<b>Market cap:</b> $1M\n\n" in message
+    assert "Floor" not in message
+    assert "Baseline" not in message
     assert '<b>Source:</b> <a href="https://dexscreener.com/solana/token">DexScreener</a>' in message
     assert '<b>Links:</b> <a href="https://www.tradingview.com/search/?query=MEME">TradingView</a>' in message
 
@@ -192,3 +197,53 @@ async def test_debug_alert_replays_latest_real_payload_to_trenchbook():
     assert added[0].event_id is None
     assert added[0].payload["event_id"] != previous.payload["event_id"]
     assert added[0].payload["connection_id"] == connection.id
+
+
+def test_render_payload_rounds_noisy_nft_floor_and_marks_direction():
+    message = render_payload(
+        {
+            "type": "alert.triggered",
+            "note": None,
+            "asset": {"symbol": "MILADY", "kind": "nft_collection", "chain": "ethereum", "address": None},
+            "rule": {
+                "type": "percent_change",
+                "threshold": "5.000000000000000000000000000000000000",
+                "threshold_currency": "USD",
+                "baseline": "2352.103400000000000000000000000000000",
+                "direction": "both",
+            },
+            "observation": {
+                "price_usd": "2477.031065599995305492",
+                "price_native": "0.9497599999999982",
+                "native_symbol": "ETH",
+                "source": "opensea",
+                "market_cap_usd": "1234567890.12",
+            },
+            "trigger": {"direction": "down", "percent_change": "-5.3100"},
+            "links": {"opensea": "https://opensea.io/collection/milady"},
+        }
+    )
+
+    assert message.startswith("🔔 <b>MILADY</b> ↓ -5.31%\n\n")
+    assert "<b>Rule:</b> 5% move up or down" in message
+    assert "<b>Floor price:</b> 0.9498 ETH ($2,477.03)\n<b>Market cap:</b> $1.23B\n\n" in message
+    assert "Baseline" not in message
+    assert "Links:" not in message
+
+
+def test_render_payload_shows_compact_market_cap():
+    message = render_payload(
+        {
+            "type": "alert.triggered",
+            "note": None,
+            "asset": {"symbol": "PEPE", "kind": "token", "chain": "ethereum", "address": "0x1"},
+            "rule": {"type": "mcap_above", "threshold": "5000000000", "baseline": "0.00001101", "direction": "up"},
+            "observation": {"price_usd": "0.0000121345", "source": "dexscreener", "market_cap_usd": "5100000000.5"},
+            "trigger": {"direction": "up", "percent_change": "10.2"},
+            "links": {},
+        }
+    )
+
+    assert "<b>Rule:</b> Market cap above $5B" in message
+    assert "<b>Price:</b> $0.00001213" in message
+    assert "<b>Market cap:</b> $5.1B" in message

@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.alerts.formatting import format_decimal, format_direction, format_direction_arrows, format_threshold
-from app.alerts.service import alert_currency, asset_kind_label, describe_alert
+from app.alerts.service import MOVE_ALERT_TYPES, alert_currency, asset_kind_label, describe_alert
 from app.bot.handlers.alerts import alerts_message
 from app.bot.handlers.settings import keyboard, owned_user
 from app.bot.keyboards import one_time_label
@@ -142,6 +142,14 @@ async def edit_alert_value(message: Message, state: FSMContext, session: AsyncSe
     await message.answer(view_text, reply_markup=markup, parse_mode="HTML")
 
 
+def _mode_label(alert: Alert) -> str:
+    if not alert.repeat:
+        return "one time, removed after it fires"
+    if alert.type in MOVE_ALERT_TYPES:
+        return "repeats, baseline moves to each trigger price"
+    return "repeats after the condition resets"
+
+
 def alert_settings_view(alert: Alert) -> tuple[str, InlineKeyboardMarkup]:
     asset = alert.asset
     is_percent = alert.type == AlertType.PERCENT_CHANGE.value
@@ -150,7 +158,7 @@ def alert_settings_view(alert: Alert) -> tuple[str, InlineKeyboardMarkup]:
         f"Market: {escape(asset_kind_label(asset))}" if asset else None,
         "",
         f"Status: {'▶️ active' if alert.status == AlertStatus.ACTIVE.value else '⏸ paused'}",
-        f"Mode: {'one time, removed after it fires' if not alert.repeat else 'repeats after the condition resets'}",
+        f"Mode: {_mode_label(alert)}",
         f"Threshold: {format_threshold(alert.type, alert.threshold_value, alert_currency(alert))}",
         f"Baseline: ${format_decimal(alert.baseline_price)}",
         f"Cooldown: {format_duration(alert.cooldown_seconds)}",

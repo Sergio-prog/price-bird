@@ -14,7 +14,14 @@ from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, Teleg
 from sqlalchemy import and_, or_, select, update
 from sqlalchemy.orm import selectinload
 
-from app.alerts.formatting import format_decimal, format_direction, format_percent, format_threshold
+from app.alerts.formatting import (
+    format_amount,
+    format_change,
+    format_decimal,
+    format_direction,
+    format_percent,
+    format_threshold,
+)
 from app.alerts.links import format_links
 from app.db.enums import AlertType, AssetType
 from app.db.models import ConnectedApp, Delivery, User
@@ -29,17 +36,17 @@ logger = logging.getLogger(__name__)
 def render_payload(payload: dict) -> str:
     if payload["type"] == "connection.test":
         return "Price Bird connection test. No alert was triggered."
-    asset, observation, rule = payload["asset"], payload["observation"], payload["rule"]
+    asset, observation, rule, trigger = payload["asset"], payload["observation"], payload["rule"], payload["trigger"]
     links = _safe_links(payload.get("links") or {})
     source = observation["source"]
     source_link = links.pop(source, None)
     source_text = format_links({source: source_link}) if source_link else escape(_source_label(source))
     lines = [
-        f"🔔 <b>Alert for {escape(asset['symbol'])}</b>",
+        f"🔔 <b>{escape(asset['symbol'])}</b> {_format_change(trigger)}",
         "",
         f"<b>Rule:</b> {_format_rule(rule)}",
         _format_observation(asset, observation),
-        f"<b>Change:</b> {_format_change(payload['trigger']['percent_change'])}",
+        *_format_market_cap(observation),
         "",
         f"<b>Source:</b> {source_text}",
     ]
@@ -61,7 +68,8 @@ def _format_rule(rule: dict) -> str:
         direction = format_direction(rule.get("direction") or "both").lower()
         return f"{format_percent(threshold)} move {escape(direction)}"
 
-    formatted = format_threshold(alert_type, threshold, rule.get("threshold_currency") or "USD")
+    compact = alert_type in {AlertType.MCAP_ABOVE.value, AlertType.MCAP_BELOW.value}
+    formatted = format_threshold(alert_type, threshold, rule.get("threshold_currency") or "USD", compact=compact)
     labels = {
         AlertType.PRICE_ABOVE.value: "Price above",
         AlertType.PRICE_BELOW.value: "Price below",
@@ -73,19 +81,34 @@ def _format_rule(rule: dict) -> str:
 
 
 def _format_observation(asset: dict, observation: dict) -> str:
-    usd = _format_decimal_value(observation["price_usd"])
+    usd = _format_usd(observation["price_usd"])
     if asset.get("kind") == AssetType.NFT_COLLECTION.value and observation.get("price_native"):
         native = _format_decimal_value(observation["price_native"])
         symbol = escape(observation.get("native_symbol") or "")
-        return f"<b>Floor:</b> {native} {symbol} (${usd})"
-    return f"<b>Price:</b> ${usd}"
+        return f"<b>Floor price:</b> {native} {symbol} ({usd})"
+    return f"<b>Price:</b> {usd}"
 
 
-def _format_change(value: str) -> str:
+def _format_market_cap(observation: dict) -> list[str]:
     try:
-        return format_percent(Decimal(value), signed=True)
+        market_cap = Decimal(observation.get("market_cap_usd") or "")
     except (InvalidOperation, TypeError, ValueError):
-        return f"{escape(str(value))}%"
+        return []
+    return [f"<b>Market cap:</b> {format_amount(market_cap, compact=True)}"]
+
+
+def _format_change(trigger: dict) -> str:
+    try:
+        return format_change(Decimal(trigger["percent_change"]), trigger.get("direction"))
+    except (InvalidOperation, TypeError, ValueError, KeyError):
+        return f"{escape(str(trigger.get('percent_change')))}%"
+
+
+def _format_usd(value) -> str:
+    try:
+        return format_amount(Decimal(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return escape(str(value))
 
 
 def _format_decimal_value(value: str) -> str:

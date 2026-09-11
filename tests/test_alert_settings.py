@@ -30,7 +30,7 @@ def _alert(**overrides):
 def test_alert_settings_view_formats_values() -> None:
     text, markup = alert_settings_view(_alert())
 
-    assert "Threshold: 10.00%" in text
+    assert "Threshold: 10%" in text
     assert "Baseline: $0.5" in text
     assert "Cooldown: 15m" in text
     assert "Direction: Up or down" in text
@@ -55,7 +55,7 @@ def test_alert_settings_view_reflects_toggled_state() -> None:
         )
     )
 
-    assert "Threshold: $1500000" in text
+    assert "Threshold: $1,500,000" in text
     assert "Status: ⏸ paused" in text
     assert "(in 3d)" in text
     assert "Note: &lt;b&gt;" in text
@@ -66,10 +66,14 @@ def test_alert_settings_view_reflects_toggled_state() -> None:
 
 
 def test_formatting_helpers() -> None:
-    assert format_threshold("percent_change", Decimal("12.5")) == "12.50%"
+    assert format_threshold("percent_change", Decimal("12.5")) == "12.5%"
     assert format_threshold("price_above", Decimal("100.10")) == "$100.1"
+    assert format_threshold("price_above", Decimal("2473.203834539996094045")) == "$2,473.20"
+    assert format_threshold("price_above", Decimal("0.9497819999999985"), "ETH") == "0.9498 ETH"
+    assert format_threshold("price_above", Decimal("0.00001234567")) == "$0.00001235"
     assert format_compact_usd(Decimal("999")) == "$999"
     assert format_compact_usd(Decimal("12345")) == "$12.35K"
+    assert format_compact_usd(Decimal("5000000000")) == "$5B"
     assert _next_option([60, 900, 3600], 3600) == 60
     assert _next_option([60, 900, 3600], 42) == 900
 
