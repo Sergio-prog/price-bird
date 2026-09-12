@@ -20,6 +20,7 @@ from sqlalchemy.orm import selectinload
 from app.db.models import ConnectedApp, Delivery, IntegrationDefinition
 from app.db.repositories.users import get_user_by_telegram_id, has_bot_access
 from app.delivery.events import queue_test
+from app.integrations.access import can_use_connection, can_use_custom_webhooks, can_use_integrations
 from app.integrations.secrets import decrypt_secret, ensure_encryption_configured
 from app.integrations.service import connection_secret, connection_url, create_custom_connection, rotate_custom_secret
 from app.integrations.urls import validate_url
@@ -42,22 +43,30 @@ async def owned_user(session, telegram_id):
 
 
 async def settings_view(session, user):
-    connections = list(
-        await session.scalars(
-            select(ConnectedApp)
-            .where(
-                ConnectedApp.user_id == user.id,
-                ConnectedApp.deleted.is_(False),
+    connections = []
+    if can_use_integrations(user) or can_use_custom_webhooks(user):
+        connections = [
+            connection
+            for connection in await session.scalars(
+                select(ConnectedApp)
+                .where(
+                    ConnectedApp.user_id == user.id,
+                    ConnectedApp.deleted.is_(False),
+                )
+                .options(selectinload(ConnectedApp.integration_definition))
+                .order_by(ConnectedApp.created_at)
             )
-            .options(selectinload(ConnectedApp.integration_definition))
-            .order_by(ConnectedApp.created_at)
+            if can_use_connection(user, connection)
+        ]
+    definitions = []
+    if can_use_integrations(user):
+        definitions = list(
+            await session.scalars(
+                select(IntegrationDefinition)
+                .where(IntegrationDefinition.enabled.is_(True))
+                .order_by(IntegrationDefinition.name)
+            )
         )
-    )
-    definitions = list(
-        await session.scalars(
-            select(IntegrationDefinition).where(IntegrationDefinition.enabled.is_(True)).order_by(IntegrationDefinition.name)
-        )
-    )
     rows = [[(f"Price Bird notifications: {'on' if user.bird_enabled else 'off'}", "settings:bird")]]
     rows += [[(f"{c.name}: {'on' if c.enabled else 'off'}", f"settings:view:{c.id}")] for c in connections]
     connected_definition_ids = {connection.integration_definition_id for connection in connections}
@@ -66,14 +75,23 @@ async def settings_view(session, user):
         for definition in definitions
         if definition.id not in connected_definition_ids
     ]
-    rows += [[("Add custom webhook", "settings:add")], [("Back", "wizard:cancel")]]
-    return (
-        "Delivery settings\n\nChoose where all your alerts are sent. Turn on Price Bird, a connected app, or both. "
-        "Turning off a destination cancels its pending deliveries. Alerts keep evaluating. "
-        "Pause individual alerts from /alerts.\n\n"
-        f'<a href="{TRENCHBOOK_BOT_URL}">Trenchbook</a> uses your same Telegram account; start its bot first.',
-        keyboard(rows),
+    if can_use_custom_webhooks(user):
+        rows.append([("Add custom webhook", "settings:add")])
+    rows.append([("Back", "wizard:cancel")])
+
+    text = (
+        "Delivery settings\n\nTurn Price Bird notifications on or off. Turning them off cancels pending Telegram "
+        "deliveries. Alerts keep evaluating. Pause individual alerts from /alerts."
     )
+    if can_use_integrations(user) or can_use_custom_webhooks(user):
+        text = (
+            "Delivery settings\n\nChoose where all your alerts are sent. Turn on Price Bird, a connected app, or both. "
+            "Turning off a destination cancels its pending deliveries. Alerts keep evaluating. "
+            "Pause individual alerts from /alerts."
+        )
+    if can_use_integrations(user):
+        text += f'\n\n<a href="{TRENCHBOOK_BOT_URL}">Trenchbook</a> uses your same Telegram account; start its bot first.'
+    return text, keyboard(rows)
 
 
 @router.message(Command("settings"))
@@ -129,12 +147,18 @@ async def settings_callback(callback: CallbackQuery, state: FSMContext, session:
         if not connection:
             await callback.answer("Connection not found")
             return
+        if not can_use_connection(user, connection):
+            await callback.answer("This destination is available to admins only.", show_alert=True)
+            return
     if action == "bird":
         await session.refresh(user, with_for_update=True)
         user.bird_enabled = not user.bird_enabled
         if not user.bird_enabled:
             await cancel_pending(session, user.id)
     elif action == "add":
+        if not can_use_custom_webhooks(user):
+            await callback.answer("Custom webhooks are available to admins only.", show_alert=True)
+            return
         try:
             ensure_encryption_configured()
         except ValueError as exc:
@@ -147,6 +171,9 @@ async def settings_callback(callback: CallbackQuery, state: FSMContext, session:
         await callback.answer()
         return
     elif action == "connect":
+        if not can_use_integrations(user):
+            await callback.answer("Integrations are available to admins only.", show_alert=True)
+            return
         if len(parts) != 3:
             await callback.answer("Integration not found")
             return
@@ -302,6 +329,10 @@ async def add_custom(message: Message, state: FSMContext, session: AsyncSession)
         return
     user = await owned_user(session, message.from_user.id) if message.from_user else None
     if not user:
+        return
+    if not can_use_custom_webhooks(user):
+        await state.clear()
+        await message.answer("Custom webhooks are available to admins only.")
         return
     text = (message.text or "").strip()
     try:

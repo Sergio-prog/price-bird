@@ -1,7 +1,7 @@
 [project]
 name = "tg-price-alerts"
 version = "0.1.0"
-description = "Telegram bot for token, NFT floor, and CEX price alerts."
+description = "Price Bird Telegram bot for token, CEX pair, market-cap, and NFT floor alerts."
 requires-python = ">=3.12"
 dependencies = [
     "aiogram>=3.13.1",

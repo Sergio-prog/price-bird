@@ -1,6 +1,8 @@
-# Telegram Price Alerts
+# Price Bird
 
-Async Telegram bot for token, NFT floor, and CEX price alerts.
+Async Telegram bot for token, CEX pair, market-cap, and NFT floor alerts.
+
+The production assets are in `assets/brand`. The release checklist is in [`docs/production-release.md`](docs/production-release.md).
 
 Production: [price-alerts-tg.serhiifotex.dev](https://price-alerts-tg.serhiifotex.dev). The built-in Trenchbook integration targets [trenches.serhiifotex.dev](https://trenches.serhiifotex.dev).
 
@@ -75,7 +77,9 @@ Floor price polling works without a key.
 
 ## Connected apps and notification settings
 
-Price Bird is the only place to create and manage alerts. `/settings` controls where notifications go. Enable Price Bird, Trenchbook, custom webhooks, or several destinations. Disabling a destination cancels its pending deliveries; a request already in flight can still finish. Alert evaluation continues. `/alerts` lets you pause individual alerts, edit their threshold/note, change percentage direction, choose once or repeating crossings, set cooldown, or expire an alert in seven days.
+Price Bird is the only place to create and manage alerts. `/settings` controls Telegram delivery for every active user. Built-in integrations and custom webhooks are admin-only by default. Set `PUBLIC_INTEGRATIONS_ENABLED=true` or `PUBLIC_CUSTOM_WEBHOOKS_ENABLED=true` only when those features are ready for every active user. The delivery worker checks the same policy before every send, so hidden or old connections cannot bypass it. Disabling a destination cancels its pending deliveries; a request already in flight can still finish. Alert evaluation continues. `/alerts` lets you pause individual alerts, edit their threshold/note, change percentage direction, choose once or repeating crossings, set cooldown, or expire an alert in seven days.
+
+Registration remains allowlist-only while `PUBLIC_ACCESS_ENABLED=false`. Set it to `true` for public launch. New users and previously pending users become active when they send `/start`; suspended users remain blocked.
 
 Price and market-cap thresholds accept `100k`, `23m`, `1b` shortcuts and an optional unit (`$0.023`, `1.2 ETH`).
 Assets quoted in a native currency (NFT floors, DEX pairs against ETH/SOL/BNB) can use that currency instead of USD;

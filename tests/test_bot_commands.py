@@ -1,4 +1,5 @@
 from app.bot.commands import BOT_COMMANDS, bot_commands
+from app.bot.profile import BOT_DESCRIPTION, BOT_SHORT_DESCRIPTION
 
 
 def test_bot_commands_are_valid_for_telegram_menu() -> None:
@@ -21,3 +22,8 @@ def test_bot_commands_exclude_admin_by_default() -> None:
     assert "whitelist" in {command.command for command in all_commands}
     assert "help" in {command.command for command in public_commands}
     assert "debugalert" not in {command.command for command in all_commands}
+
+
+def test_telegram_profile_copy_fits_api_limits() -> None:
+    assert 1 <= len(BOT_DESCRIPTION) <= 512
+    assert 1 <= len(BOT_SHORT_DESCRIPTION) <= 120

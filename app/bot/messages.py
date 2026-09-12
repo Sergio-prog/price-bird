@@ -11,13 +11,12 @@ def start_message(first_name: str | None, username: str | None) -> str:
     name = username or first_name or "there"
     return "\n".join(
         [
-            f"👋 <b>{escape(name)}</b>, welcome to <b>Price Alerts</b>.",
+            f"👋 <b>{escape(name)}</b>, welcome to <b>Price Bird</b>.",
             "",
-            "Catch token moves, CEX pairs, and NFT floor changes before the market gets noisy.",
+            "Set alerts for tokens, CEX pairs, market caps, and NFT floors. Price Bird checks live market data "
+            "and messages you when your rule triggers.",
             "",
-            "🔎 <b>Watch</b> coins by ticker or contract, then choose percent or price triggers.",
-            "🖼 <b>Follow</b> NFT collections by floor price without token spam.",
-            "📌 <b>Review</b> active alerts and remove stale ones from the menu.",
+            "Choose an option below, or send <code>/alert BTC 10%</code> to start.",
             "",
             f'📣 <a href="{CHANNEL_URL}">Channel</a>',
         ]

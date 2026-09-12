@@ -6,6 +6,7 @@ import pytest
 from app.bot.handlers.settings import TRENCHBOOK_BOT_URL, settings_view
 from app.core.config import settings
 from app.db.models import ConnectedApp, IntegrationDefinition
+from app.integrations.access import can_use_connection, can_use_custom_webhooks, can_use_integrations
 from app.integrations.catalog import TRENCHBOOK_BASE_URL, configure_trenchbook
 from app.integrations.secrets import encrypt_secret, generate_encryption_key
 from app.integrations.service import connection_secret, connection_url, create_custom_connection, rotate_custom_secret
@@ -75,11 +76,46 @@ def test_default_connection_uses_catalog_url_and_secret():
 async def test_settings_links_to_trenchbook_bot():
     session = Mock()
     session.scalars = AsyncMock(side_effect=[[], []])
-    user = SimpleNamespace(id=1, bird_enabled=True)
+    user = SimpleNamespace(id=1, bird_enabled=True, role="admin", access_status="active")
 
     text, _ = await settings_view(session, user)
 
     assert f'<a href="{TRENCHBOOK_BOT_URL}">Trenchbook</a>' in text
+
+
+@pytest.mark.asyncio
+async def test_public_settings_hide_private_destinations(monkeypatch):
+    monkeypatch.setattr(settings, "public_integrations_enabled", False)
+    monkeypatch.setattr(settings, "public_custom_webhooks_enabled", False)
+    session = Mock()
+    user = SimpleNamespace(id=1, bird_enabled=True, role="user", access_status="active")
+
+    text, markup = await settings_view(session, user)
+
+    assert "Trenchbook" not in text
+    assert [button.text for row in markup.inline_keyboard for button in row] == [
+        "Price Bird notifications: on",
+        "Back",
+    ]
+    session.scalars.assert_not_called()
+
+
+def test_private_destinations_are_admin_only_by_default(monkeypatch):
+    monkeypatch.setattr(settings, "public_integrations_enabled", False)
+    monkeypatch.setattr(settings, "public_custom_webhooks_enabled", False)
+    admin = SimpleNamespace(role="admin", access_status="active")
+    user = SimpleNamespace(role="user", access_status="active")
+    integration = ConnectedApp(id="integration", integration_definition_id="definition")
+    webhook = ConnectedApp(id="webhook", integration_definition_id=None)
+
+    assert can_use_integrations(admin)
+    assert can_use_custom_webhooks(admin)
+    assert can_use_connection(admin, integration)
+    assert can_use_connection(admin, webhook)
+    assert not can_use_integrations(user)
+    assert not can_use_custom_webhooks(user)
+    assert not can_use_connection(user, integration)
+    assert not can_use_connection(user, webhook)
 
 
 @pytest.mark.asyncio

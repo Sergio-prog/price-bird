@@ -52,7 +52,7 @@ def test_signature_contract():
 async def test_independent_destinations(bird, apps, expected):
     rows = []
     session = SimpleNamespace(add=rows.append, scalars=AsyncMock(return_value=[ConnectedApp(id=id) for id in apps]))
-    user = User(id=1, telegram_id=42, bird_enabled=bird)
+    user = User(id=1, telegram_id=42, bird_enabled=bird, role="admin", access_status="active")
     alert = Alert(
         id=2,
         user_id=1,
@@ -134,6 +134,56 @@ async def test_disabled_destination_is_cancelled_before_send(monkeypatch):
     delivery = SimpleNamespace(id="delivery", user_id=1, connection_id=None, destination="bird", lease_token="lease")
     await worker.process_delivery(delivery, bot)
     bot.send_message.assert_not_awaited()
+    assert statements[0].compile().params["status"] == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_private_integration_is_cancelled_for_non_admin(monkeypatch):
+    from app.delivery import worker
+
+    statements = []
+    connection = ConnectedApp(
+        id="private-integration",
+        user_id=1,
+        integration_definition_id="definition",
+        enabled=True,
+        deleted=False,
+    )
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        def begin(self):
+            return self
+
+        async def get(self, model, key):
+            return User(access_status="active", role="user", telegram_id=42)
+
+        async def scalar(self, statement):
+            return connection
+
+        async def execute(self, statement):
+            statements.append(statement)
+
+    monkeypatch.setattr(worker, "SessionLocal", Session)
+    send_webhook = AsyncMock()
+    monkeypatch.setattr(worker, "send_webhook", send_webhook)
+    bot = SimpleNamespace(send_message=AsyncMock())
+    delivery = SimpleNamespace(
+        id="delivery",
+        user_id=1,
+        connection_id=connection.id,
+        destination=connection.id,
+        lease_token="lease",
+    )
+
+    await worker.process_delivery(delivery, bot)
+
+    send_webhook.assert_not_awaited()
     assert statements[0].compile().params["status"] == "cancelled"
 
 

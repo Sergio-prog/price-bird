@@ -29,6 +29,7 @@ from app.db.repositories.users import has_bot_access
 from app.db.session import SessionLocal
 from app.delivery.legacy import route_legacy_events
 from app.delivery.webhook import DeliveryError, send_webhook
+from app.integrations.access import can_use_connection
 
 logger = logging.getLogger(__name__)
 
@@ -171,7 +172,9 @@ async def process_delivery(delivery: Delivery, bot: Bot) -> None:
             )
             if not has_bot_access(user) or (delivery.destination == "bird" and not user.bird_enabled):
                 status = "cancelled"
-            elif delivery.connection_id and (connection is None or not connection.enabled or connection.deleted):
+            elif delivery.connection_id and (
+                connection is None or not connection.enabled or connection.deleted or not can_use_connection(user, connection)
+            ):
                 status = "cancelled"
             elif connection:
                 await send_webhook(connection, delivery.id, delivery.payload)

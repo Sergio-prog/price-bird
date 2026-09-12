@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.db.enums import AccessStatus, UserRole
 from app.db.models import User
 
@@ -41,7 +42,11 @@ async def upsert_telegram_user(
         .returning(User.id)
     )
     user_id = await session.scalar(stmt)
-    return await get_user_by_id(session, user_id)
+    user = await get_user_by_id(session, user_id)
+    if settings.public_access_enabled and user.access_status == AccessStatus.PENDING.value:
+        user.access_status = AccessStatus.ACTIVE.value
+        await session.flush()
+    return user
 
 
 async def get_user_by_id(session: AsyncSession, user_id: int) -> User:

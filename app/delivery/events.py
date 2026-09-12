@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.alerts.links import build_asset_links
 from app.db.models import Alert, AlertEvent, Asset, ConnectedApp, Delivery
+from app.integrations.access import can_use_connection
 from app.integrations.catalog import TRENCHBOOK_SLUG
 
 
@@ -54,6 +55,8 @@ async def queue_event(session: AsyncSession, event: AlertEvent, alert: Alert, as
         )
     )
     for connection in connections:
+        if not can_use_connection(alert.user, connection):
+            continue
         session.add(
             Delivery(
                 id=str(uuid4()),

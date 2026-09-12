@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
+from typing import Annotated
 
 import typer
 from aiogram import Bot
+from aiogram.types import FSInputFile, InputProfilePhotoStatic
 
 from app.bot.commands import bot_commands
+from app.bot.profile import BOT_DESCRIPTION, BOT_NAME, BOT_SHORT_DESCRIPTION
 from app.core.config import settings
 from app.db import repositories as repo
 from app.db.enums import AccessStatus, UserRole
@@ -14,6 +18,7 @@ from app.integrations.catalog import TRENCHBOOK_BASE_URL, configure_trenchbook
 from app.integrations.secrets import generate_encryption_key
 
 app = typer.Typer(help="Price alert bot admin CLI.")
+DEFAULT_PROFILE_PHOTO = Path(__file__).resolve().parents[1] / "assets/brand/price-bird-logo.jpg"
 
 
 @app.callback(invoke_without_command=True)
@@ -37,6 +42,41 @@ def sync_commands(include_admin: bool = typer.Option(False, help="Include admin-
             await bot.session.close()
 
         typer.echo(f"Synced {len(commands)} bot commands.")
+
+    asyncio.run(run())
+
+
+@app.command()
+def sync_profile(
+    profile_photo: Annotated[
+        Path,
+        typer.Option(
+            exists=True,
+            file_okay=True,
+            dir_okay=False,
+            readable=True,
+            help="Static JPG profile photo to upload.",
+        ),
+    ] = DEFAULT_PROFILE_PHOTO,
+) -> None:
+    """Publish the production name, copy, and profile photo to Telegram."""
+
+    async def run() -> None:
+        if not settings.bot_token:
+            raise typer.BadParameter("BOT_TOKEN is required")
+
+        bot = Bot(settings.bot_token)
+        try:
+            await bot.set_my_name(BOT_NAME)
+            await bot.set_my_description(BOT_DESCRIPTION)
+            await bot.set_my_short_description(BOT_SHORT_DESCRIPTION)
+            await bot.set_my_profile_photo(
+                InputProfilePhotoStatic(photo=FSInputFile(profile_photo)),
+            )
+        finally:
+            await bot.session.close()
+
+        typer.echo("Synced the Price Bird name, description, bio, and profile photo.")
 
     asyncio.run(run())
 

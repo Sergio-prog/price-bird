@@ -10,6 +10,7 @@ def test_cli_without_args_lists_commands() -> None:
     assert result.exit_code == 0
     assert "Commands" in result.output
     assert "sync-commands" in result.output
+    assert "sync-profile" in result.output
     assert "create-admin" in result.output
     assert "configure-trenchbook-integration" in result.output
     assert "generate-integration-key" in result.output
