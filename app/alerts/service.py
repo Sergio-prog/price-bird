@@ -100,7 +100,8 @@ async def refresh_and_evaluate_asset(session: AsyncSession, asset: Asset) -> lis
             alert.armed = True
             continue
         at = datetime.now(UTC)
-        if not alert.armed or (
+        repeating_move = alert.repeat and alert.type in MOVE_ALERT_TYPES
+        if (not repeating_move and not alert.armed) or (
             alert.last_triggered_at is not None and (at - alert.last_triggered_at).total_seconds() < alert.cooldown_seconds
         ):
             continue
@@ -111,7 +112,7 @@ async def refresh_and_evaluate_asset(session: AsyncSession, asset: Asset) -> lis
             direction=result.direction.value,
             percent_change=result.percent_change.quantize(Decimal("0.0001")),
         )
-        alert.armed = False
+        alert.armed = repeating_move
         alert.last_triggered_at = at
         await queue_event(session, event, alert, asset, quote)
         if not alert.repeat:

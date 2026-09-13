@@ -78,8 +78,9 @@ async def test_repeating_move_alert_rebases_and_respects_cooldown(monkeypatch):
         threshold_value=Decimal("10"),
         direction="both",
         repeat=True,
-        armed=True,
-        cooldown_seconds=0,
+        armed=False,
+        cooldown_seconds=900,
+        last_triggered_at=datetime(2020, 1, 1, tzinfo=UTC),
         user=User(access_status="active"),
     )
     quote = PriceQuote(Decimal("120"), "provider", {})
@@ -93,17 +94,13 @@ async def test_repeating_move_alert_rebases_and_respects_cooldown(monkeypatch):
     asset = SimpleNamespace(id=1)
     assert await service.refresh_and_evaluate_asset(None, asset) == [2]
     assert alert.baseline_price == Decimal("120")
-    quote = PriceQuote(Decimal("121"), "provider", {})
-    assert await service.refresh_and_evaluate_asset(None, asset) == []
     assert alert.armed
-    quote = PriceQuote(Decimal("126"), "provider", {})
+    quote = PriceQuote(Decimal("150"), "provider", {})
     assert await service.refresh_and_evaluate_asset(None, asset) == []
-    alert.cooldown_seconds = 900
-    quote = PriceQuote(Decimal("100"), "provider", {})
-    assert await service.refresh_and_evaluate_asset(None, asset) == []
+    assert alert.baseline_price == Decimal("120")
     alert.last_triggered_at = datetime(2020, 1, 1, tzinfo=UTC)
     assert await service.refresh_and_evaluate_asset(None, asset) == [2]
-    assert alert.baseline_price == Decimal("100")
+    assert alert.baseline_price == Decimal("150")
     assert queued.await_count == 2
 
 
