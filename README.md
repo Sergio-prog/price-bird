@@ -132,4 +132,18 @@ Trenchbook's old limit records are preserved but no longer evaluate after its cu
 
 ## CI checks
 
-Run `uv sync --locked --extra dev`, then `sh scripts/check.sh` for Ruff lint, formatting and pytest. GitHub Actions runs these checks on pull requests and pushes to `main`, along with conventional branch/PR/commit names and Alembic migration/model checks against a fresh PostgreSQL 16 database. PR checks include title edits and support stacked branches. CI does not deploy the application.
+Run `uv sync --locked --extra dev`, then `sh scripts/check.sh` for Ruff lint, formatting and pytest. GitHub Actions runs these checks on pull requests and pushes to `main`, along with conventional branch/PR/commit names and Alembic migration/model checks against a fresh PostgreSQL 16 database. PR checks include title edits and support stacked branches.
+
+## Continuous deployment
+
+After both CI jobs pass on a push to `main`, the `Publish to VPS` job connects over SSH and runs `deploy/update.sh`. The script fast-forwards the VPS checkout, builds the application images, applies migrations, restarts the bot and worker, and checks that both containers stay running.
+
+Configure these repository secrets:
+
+- `DEPLOY_HOST`: VPS hostname or IP address.
+- `DEPLOY_USER`: SSH user that owns the checkout and can run Docker Compose.
+- `DEPLOY_SSH_KEY`: private SSH key authorized for that user.
+- `DEPLOY_PORT`: optional SSH port, defaults to `22`.
+- `DEPLOY_PATH`: optional checkout path, defaults to `/opt/price-bird`.
+
+The VPS checkout must have its production `.env`, an `origin` remote pointing to this repository, and Docker with the Compose plugin. The deployment job skips with a notice until the three required connection secrets exist. Production environment protection rules can require approval before the job starts.
