@@ -12,6 +12,7 @@ from app.alerts.service import alert_currency, asset_kind_label, create_alert_fr
 from app.bot.keyboards import alert_created_keyboard
 from app.db import repositories as repo
 from app.db.enums import AlertDirection, AlertType, AssetType
+from app.i18n import t
 from app.providers.base import AssetCandidate
 
 
@@ -35,7 +36,7 @@ async def create_alert_from_candidate(
     if not repo.has_bot_access(user):
         await _send_result(
             message,
-            "Access pending.",
+            t("access-pending"),
             edit_message=edit_message,
             edit_chat_id=edit_chat_id,
             edit_message_id=edit_message_id,
@@ -49,7 +50,7 @@ async def create_alert_from_candidate(
         await session.rollback()
         await _send_result(
             message,
-            f"Could not create alert: {exc}",
+            t("alert-create-failed", reason=str(exc)),
             edit_message=edit_message,
             edit_chat_id=edit_chat_id,
             edit_message_id=edit_message_id,
@@ -59,15 +60,13 @@ async def create_alert_from_candidate(
     await session.commit()
     await _send_result(
         message,
-        "\n".join(
-            [
-                f"✅ <b>{escape(asset.symbol)}</b> is now on your watchlist.",
-                "",
-                f"Trigger: {_format_condition(parsed, alert_currency(alert))}",
-                f"Baseline: ${format_decimal(alert.baseline_price)}",
-                f"Market: {asset_kind_label(asset)}",
-                f"Mode: {'repeat' if alert.repeat else 'one time'}",
-            ]
+        t(
+            "alert-created",
+            symbol=escape(asset.symbol),
+            condition=_format_condition(parsed, alert_currency(alert)),
+            baseline=f"${format_decimal(alert.baseline_price)}",
+            market=asset_kind_label(asset),
+            mode=t("mode-repeat" if alert.repeat else "mode-one-time"),
         ),
         reply_markup=alert_created_keyboard(),
         parse_mode="HTML",
@@ -83,7 +82,7 @@ async def ensure_access(message: Message, session: AsyncSession) -> bool:
 
     user = await repo.get_user_by_telegram_id(session, message.from_user.id)
     if not repo.has_bot_access(user):
-        await message.answer("Access denied. Ask an admin to whitelist your Telegram ID.")
+        await message.answer(t("access-denied-whitelist"))
         return False
     return True
 
@@ -94,7 +93,7 @@ async def ensure_admin(message: Message, session: AsyncSession) -> bool:
 
     user = await repo.get_user_by_telegram_id(session, message.from_user.id)
     if not repo.is_admin(user):
-        await message.answer("Admin access required.")
+        await message.answer(t("admin-required"))
         return False
     return True
 
@@ -169,13 +168,14 @@ async def _send_result(
 
 
 def _format_condition(parsed: ParsedAlertCommand, currency: str) -> str:
-    threshold = format_threshold(parsed.alert_type.value, parsed.threshold_value, currency)
     if parsed.alert_type == AlertType.PERCENT_CHANGE:
-        return f"Moves {format_percent(parsed.threshold_value)} up or down"
-    if parsed.alert_type == AlertType.PRICE_ABOVE:
-        return f"Price goes above {threshold}"
-    if parsed.alert_type == AlertType.PRICE_BELOW:
-        return f"Price goes below {threshold}"
-    if parsed.alert_type in {AlertType.MCAP_ABOVE, AlertType.MCAP_BELOW}:
-        return f"Market cap {parsed.direction.value}: {threshold}"
-    return "Price alert"
+        return t("condition-percent", threshold=format_percent(parsed.threshold_value))
+    key = {
+        AlertType.PRICE_ABOVE: "condition-price-above",
+        AlertType.PRICE_BELOW: "condition-price-below",
+        AlertType.MCAP_ABOVE: "condition-mcap-above",
+        AlertType.MCAP_BELOW: "condition-mcap-below",
+    }.get(parsed.alert_type)
+    if key is None:
+        return t("condition-default")
+    return t(key, threshold=format_threshold(parsed.alert_type.value, parsed.threshold_value, currency))

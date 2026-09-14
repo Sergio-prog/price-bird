@@ -9,6 +9,7 @@ from app.bot.commands import BOT_COMMANDS
 from app.bot.keyboards import start_menu_keyboard
 from app.bot.messages import help_message, start_message
 from app.db import repositories as repo
+from app.i18n import t
 
 router = Router(name="common")
 
@@ -45,7 +46,7 @@ async def start(message: Message, session: AsyncSession) -> None:
             disable_web_page_preview=True,
         )
     else:
-        await message.answer("Access pending. Ask an admin to whitelist your Telegram ID.")
+        await message.answer(t("access-pending-whitelist"))
 
 
 @router.message(Command("help"))

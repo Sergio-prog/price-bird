@@ -60,6 +60,10 @@ async def get_user_by_telegram_id(session: AsyncSession, telegram_id: int) -> Us
     return await session.scalar(select(User).where(User.telegram_id == telegram_id))
 
 
+async def get_user_language(session: AsyncSession, telegram_id: int) -> str | None:
+    return await session.scalar(select(User.language).where(User.telegram_id == telegram_id))
+
+
 async def ensure_admin(
     session: AsyncSession,
     *,

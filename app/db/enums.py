@@ -20,6 +20,21 @@ class AssetType(StrEnum):
     CEX_SYMBOL = "cex_symbol"
 
 
+class AlertLimitKind(StrEnum):
+    TOKEN = "token"
+    NFT = "nft"
+
+    @classmethod
+    def for_asset_type(cls, asset_type: str) -> AlertLimitKind:
+        return cls.NFT if asset_type == AssetType.NFT_COLLECTION.value else cls.TOKEN
+
+    @property
+    def asset_types(self) -> tuple[str, ...]:
+        if self is AlertLimitKind.NFT:
+            return (AssetType.NFT_COLLECTION.value,)
+        return (AssetType.TOKEN.value, AssetType.CEX_SYMBOL.value)
+
+
 class AlertType(StrEnum):
     PERCENT_CHANGE = "percent_change"
     PRICE_ABOVE = "price_above"

@@ -10,6 +10,7 @@ from app.bot.messages import (
     provider_misconfigured_message,
     start_message,
 )
+from app.i18n import t
 from app.providers.base import ProviderConfigurationError
 
 
@@ -195,11 +196,11 @@ async def test_wizard_back_returns_to_previous_step(monkeypatch: pytest.MonkeyPa
 
     await alert_handlers.wizard_back_to_type(FakeCallback("wizard:back", message), state)
     assert state.state == alert_handlers.AlertWizard.waiting_type
-    assert message.edits[-1][0] == alert_handlers.ALERT_TYPE_PROMPT
+    assert message.edits[-1][0] == t("alert-type-prompt")
 
     await alert_handlers.wizard_back_to_candidates(FakeCallback("wizard:back", message), state)
     assert state.state == alert_handlers.AlertWizard.waiting_asset
-    assert message.edits[-1][0] == alert_handlers.CANDIDATES_PROMPT
+    assert message.edits[-1][0] == t("candidates-prompt")
 
     await alert_handlers.wizard_back_to_query(FakeCallback("wizard:back", message), state)
     assert state.state == alert_handlers.AlertWizard.waiting_query

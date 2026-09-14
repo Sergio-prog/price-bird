@@ -3,6 +3,7 @@ from __future__ import annotations
 from decimal import ROUND_HALF_UP, Decimal
 
 from app.db.enums import AlertType
+from app.i18n import t
 
 _MAX_FRACTION_DIGITS = 18
 
@@ -66,12 +67,9 @@ def format_threshold(alert_type: str, value: Decimal, currency: str = "USD", *, 
 
 
 def format_direction(value: str) -> str:
-    labels = {
-        "up": "Up",
-        "down": "Down",
-        "both": "Up or down",
-    }
-    return labels.get(value, value.replace("_", " ").capitalize())
+    if value in {"up", "down", "both"}:
+        return t(f"direction-{value}")
+    return value.replace("_", " ").capitalize()
 
 
 def format_direction_arrows(value: str) -> str:

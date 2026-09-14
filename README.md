@@ -74,6 +74,33 @@ Floor price polling works without a key.
 - `/alerts` - list active alerts with delete buttons.
 - `/deletealert 123` - delete an active alert by ID.
 - `/cancel` - cancel the current alert wizard.
+- `/language` - switch between English, Ukrainian and Russian.
+
+## Languages
+
+The bot speaks English, Ukrainian and Russian. It uses the language picked in `/language` or Settings, then the Telegram client language, then English. Strings live in `app/i18n/locales/*.ftl` ([Fluent](https://projectfluent.org/)). Every locale must define the same messages with the same variables; `tests/test_i18n.py` enforces it. After changing command descriptions or profile copy, run `uv run price-alert-cli sync-commands` and `uv run price-alert-cli sync-profile` to publish every language.
+
+## Alert limits
+
+Limits live in Postgres and apply per alert kind: `token` covers DEX tokens and CEX pairs, `nft` covers NFT collections. Active and paused alerts count toward them.
+
+`alert_limits` has one row per kind. The migration seeds these values from provider rate limits at the 45-second refresh interval:
+
+| Column | token | nft | Meaning |
+|---|---|---|---|
+| `max_watched_assets` | 200 | 5 | Distinct assets polled per refresh. Binance allows about 200 single-symbol tickers and DexScreener about 225 tokens per tick; the free OpenSea key covers about 7 collections. |
+| `max_active_alerts` | 5000 | 500 | Alerts across all users. |
+| `default_user_max_alerts` | 20 | 5 | Per-user limit when the user has no override. |
+
+A new alert on an asset that is already watched adds no provider requests, so it skips the watched-asset check. `user_alert_limits` stores per-user overrides:
+
+```bash
+uv run price-alert-cli set-alert-limit --kind nft --max-watched-assets 20
+uv run price-alert-cli set-user-alert-limit --telegram-id 123456789 --kind token --max-alerts 50
+uv run price-alert-cli set-user-alert-limit --telegram-id 123456789 --kind token
+```
+
+The last command removes the override and restores the default.
 
 ## Connected apps and notification settings
 
