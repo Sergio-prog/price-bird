@@ -1,5 +1,6 @@
-from app.bot.commands import BOT_COMMANDS, bot_commands
-from app.bot.profile import BOT_DESCRIPTION, BOT_SHORT_DESCRIPTION
+from app.bot.commands import BOT_COMMANDS, bot_commands, command_description
+from app.bot.profile import bot_description, bot_short_description
+from app.i18n import SUPPORTED_LOCALES
 
 
 def test_bot_commands_are_valid_for_telegram_menu() -> None:
@@ -10,7 +11,8 @@ def test_bot_commands_are_valid_for_telegram_menu() -> None:
         assert command.command == command.command.lower()
         assert command.command.replace("_", "").isalnum()
         assert 1 <= len(command.command) <= 32
-        assert 1 <= len(command.description) <= 256
+        for locale in SUPPORTED_LOCALES:
+            assert 1 <= len(command_description(command, locale)) <= 256
 
 
 def test_bot_commands_exclude_admin_by_default() -> None:
@@ -25,5 +27,6 @@ def test_bot_commands_exclude_admin_by_default() -> None:
 
 
 def test_telegram_profile_copy_fits_api_limits() -> None:
-    assert 1 <= len(BOT_DESCRIPTION) <= 512
-    assert 1 <= len(BOT_SHORT_DESCRIPTION) <= 120
+    for locale in SUPPORTED_LOCALES:
+        assert 1 <= len(bot_description(locale)) <= 512
+        assert 1 <= len(bot_short_description(locale)) <= 120

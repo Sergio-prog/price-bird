@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -44,6 +45,7 @@ class User(Base, TimestampMixin):
     first_name: Mapped[str | None] = mapped_column(String(255))
     last_name: Mapped[str | None] = mapped_column(String(255))
     language_code: Mapped[str | None] = mapped_column(String(16))
+    language: Mapped[str | None] = mapped_column(String(8))
     role: Mapped[str] = mapped_column(String(32), default=UserRole.USER.value, server_default=UserRole.USER.value)
     access_status: Mapped[str] = mapped_column(
         String(32), default=AccessStatus.PENDING.value, server_default=AccessStatus.PENDING.value
@@ -157,6 +159,30 @@ class AlertEvent(Base):
 
     alert: Mapped[Alert] = relationship(back_populates="events")
     snapshot: Mapped[PriceSnapshot] = relationship()
+
+
+class AlertLimit(Base, TimestampMixin):
+    __tablename__ = "alert_limits"
+    __table_args__ = (
+        CheckConstraint(
+            "max_watched_assets >= 0 AND max_active_alerts >= 0 AND default_user_max_alerts >= 0",
+            name="ck_alert_limits_non_negative",
+        ),
+    )
+
+    asset_kind: Mapped[str] = mapped_column(String(16), primary_key=True)
+    max_watched_assets: Mapped[int]
+    max_active_alerts: Mapped[int]
+    default_user_max_alerts: Mapped[int]
+
+
+class UserAlertLimit(Base, TimestampMixin):
+    __tablename__ = "user_alert_limits"
+    __table_args__ = (CheckConstraint("max_alerts >= 0", name="ck_user_alert_limits_non_negative"),)
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    asset_kind: Mapped[str] = mapped_column(ForeignKey("alert_limits.asset_kind", ondelete="CASCADE"), primary_key=True)
+    max_alerts: Mapped[int]
 
 
 class ConnectedApp(Base, TimestampMixin):

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 
 from app.db.enums import AlertDirection, AlertType, AssetType
+from app.i18n import LocalizedError
 from app.utils.amounts import parse_amount
 
 _PERCENT_RE = re.compile(r"^(?P<value>\d+(?:\.\d+)?)%$")
@@ -24,7 +25,7 @@ class ParsedAlertCommand:
 def parse_alert_command(text: str) -> ParsedAlertCommand:
     body = text.removeprefix("/alert").strip()
     if not body:
-        raise ValueError("Usage: /alert BTC 10% or /alert ETH > 70000")
+        raise LocalizedError("error-alert-usage")
 
     parts = body.split()
     floor = "floor" in [part.lower() for part in parts]
@@ -43,7 +44,7 @@ def parse_alert_command(text: str) -> ParsedAlertCommand:
             condition_parts = parts[operator_index:]
 
     if not query or not condition_parts:
-        raise ValueError("Missing asset query or alert condition")
+        raise LocalizedError("error-alert-missing-parts")
 
     condition = " ".join(condition_parts).strip()
     percent_match = _PERCENT_RE.match(condition)
@@ -69,14 +70,14 @@ def parse_alert_command(text: str) -> ParsedAlertCommand:
             threshold_currency=currency,
         )
 
-    raise ValueError("Condition must be a percent like 10% or threshold like > 70000, > 100k or < 0.8 ETH")
+    raise LocalizedError("error-alert-condition")
 
 
 def _decimal(value: str) -> Decimal:
     try:
         parsed = Decimal(value)
     except InvalidOperation as exc:
-        raise ValueError(f"Invalid number: {value}") from exc
+        raise LocalizedError("error-invalid-number", value=value) from exc
     if parsed <= 0:
-        raise ValueError("Alert value must be positive")
+        raise LocalizedError("error-amount-not-positive")
     return parsed

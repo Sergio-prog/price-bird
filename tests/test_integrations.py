@@ -95,7 +95,8 @@ async def test_public_settings_hide_private_destinations(monkeypatch):
     assert "Trenchbook" not in text
     assert [button.text for row in markup.inline_keyboard for button in row] == [
         "Price Bird notifications: on",
-        "Back",
+        "🌐 Language: English",
+        "↩️ Back",
     ]
     session.scalars.assert_not_called()
 

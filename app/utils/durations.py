@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from datetime import timedelta
 
+from app.i18n import LocalizedError
+
 _UNIT_SECONDS = {
     "s": 1,
     "sec": 1,
@@ -37,19 +39,18 @@ _UNIT_SECONDS = {
     "years": 31536000,
 }
 _DURATION_RE = re.compile(r"^(?P<value>\d+(?:[.,]\d+)?)\s*(?P<unit>[a-z]+)$")
-_UNITS_HINT = "Use a number with a unit: 15m, 24h, 2d, 5w, 3mo, 1y (also 15 min, 5 years)."
 
 
 def parse_duration(text: str) -> timedelta:
     match = _DURATION_RE.match(text.strip().lower())
     if not match:
-        raise ValueError(_UNITS_HINT)
+        raise LocalizedError("error-duration-format")
     unit = _UNIT_SECONDS.get(match.group("unit"))
     if unit is None:
-        raise ValueError(_UNITS_HINT)
+        raise LocalizedError("error-duration-format")
     seconds = float(match.group("value").replace(",", ".")) * unit
     if seconds <= 0:
-        raise ValueError("Duration must be positive.")
+        raise LocalizedError("error-duration-not-positive")
     return timedelta(seconds=round(seconds))
 
 

@@ -3,6 +3,8 @@ from __future__ import annotations
 import ipaddress
 from urllib.parse import urlsplit
 
+from app.i18n import LocalizedError
+
 
 def validate_url(url: str) -> str:
     try:
@@ -16,13 +18,13 @@ def validate_url(url: str) -> str:
             and not parsed.fragment
         )
     except ValueError as exc:
-        raise ValueError("Use an HTTPS URL on port 443.") from exc
+        raise LocalizedError("error-url-https") from exc
     if not valid or len(url) > 2048:
-        raise ValueError("Use an HTTPS URL on port 443, without credentials or fragments.")
+        raise LocalizedError("error-url-invalid")
     try:
         address = ipaddress.ip_address(parsed.hostname)
     except ValueError:
         return url
     if not address.is_global or address.is_multicast:
-        raise ValueError("Webhook addresses must be public.")
+        raise LocalizedError("error-url-public")
     return url

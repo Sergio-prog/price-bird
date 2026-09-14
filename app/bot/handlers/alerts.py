@@ -44,6 +44,7 @@ from app.bot.messages import (
 from app.bot.states import AlertWizard
 from app.db import repositories as repo
 from app.db.enums import AlertDirection, AlertType, AssetType
+from app.i18n import LocalizedError, t
 from app.providers.base import ProviderConfigurationError
 from app.providers.registry import provider_registry
 from app.utils.amounts import parse_amount, resolve_currency
@@ -51,9 +52,6 @@ from app.utils.currency import native_symbol_or_none
 
 router = Router(name="alerts")
 logger = logging.getLogger(__name__)
-
-CANDIDATES_PROMPT = "Select the asset to watch:"
-ALERT_TYPE_PROMPT = "Choose when this alert should trigger:"
 
 
 @router.callback_query(F.data == "menu:newalert")
@@ -129,21 +127,21 @@ async def delete_alert(message: Message, session: AsyncSession) -> None:
 
     alert_id = command_int_arg(message)
     if alert_id is None:
-        await message.answer("Usage: /deletealert 123")
+        await message.answer(t("delete-alert-usage"))
         return
 
     deleted = await repo.delete_active_alert_for_user(session, telegram_id=message.from_user.id, alert_id=alert_id)
     await session.commit()
     if not deleted:
-        await message.answer("Active alert not found.")
+        await message.answer(t("active-alert-not-found"))
         return
-    await message.answer(f"Deleted alert #{alert_id}.")
+    await message.answer(t("alert-deleted", id=str(alert_id)))
 
 
 @router.message(Command("cancel"))
 async def cancel_alert_wizard(message: Message, state: FSMContext) -> None:
     if await state.get_state() is None:
-        await message.answer("Nothing to cancel.")
+        await message.answer(t("nothing-to-cancel"))
         return
     await state.clear()
     await _send_start_message(message)
@@ -207,7 +205,7 @@ async def alert_shortcut(message: Message, state: FSMContext, session: AsyncSess
         await state.clear()
         await state.update_data(parsed=parsed_to_dict(parsed), candidates=[candidate.__dict__ for candidate in candidates])
         await state.set_state(AlertWizard.waiting_asset)
-        await message.answer(CANDIDATES_PROMPT, reply_markup=asset_candidates_keyboard(candidates, back_to_menu=True))
+        await message.answer(t("candidates-prompt"), reply_markup=asset_candidates_keyboard(candidates, back_to_menu=True))
         return
 
     await create_alert_from_candidate(message, session, parsed, candidates[0])
@@ -238,7 +236,7 @@ async def wizard_query(message: Message, state: FSMContext, session: AsyncSessio
         return
     await state.update_data(candidates=[candidate.__dict__ for candidate in candidates])
     await state.set_state(AlertWizard.waiting_asset)
-    await _send_wizard_message(message, state, CANDIDATES_PROMPT, reply_markup=asset_candidates_keyboard(candidates))
+    await _send_wizard_message(message, state, t("candidates-prompt"), reply_markup=asset_candidates_keyboard(candidates))
 
 
 @router.callback_query(AlertWizard.waiting_asset, F.data.startswith("asset:"))
@@ -264,7 +262,7 @@ async def wizard_asset(callback: CallbackQuery, state: FSMContext, session: Asyn
     else:
         await state.set_state(AlertWizard.waiting_type)
         if isinstance(callback.message, Message):
-            await callback.message.edit_text(ALERT_TYPE_PROMPT, reply_markup=alert_type_keyboard())
+            await callback.message.edit_text(t("alert-type-prompt"), reply_markup=alert_type_keyboard())
     await callback.answer()
 
 
@@ -315,7 +313,7 @@ async def wizard_back_to_candidates(callback: CallbackQuery, state: FSMContext) 
     candidates = [candidate_from_dict(raw) for raw in data.get("candidates", [])]
     await state.set_state(AlertWizard.waiting_asset)
     if isinstance(callback.message, Message):
-        await _edit_message(callback.message, CANDIDATES_PROMPT, reply_markup=asset_candidates_keyboard(candidates))
+        await _edit_message(callback.message, t("candidates-prompt"), reply_markup=asset_candidates_keyboard(candidates))
     await callback.answer()
 
 
@@ -323,7 +321,7 @@ async def wizard_back_to_candidates(callback: CallbackQuery, state: FSMContext) 
 async def wizard_back_to_type(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(AlertWizard.waiting_type)
     if isinstance(callback.message, Message):
-        await _edit_message(callback.message, ALERT_TYPE_PROMPT, reply_markup=alert_type_keyboard())
+        await _edit_message(callback.message, t("alert-type-prompt"), reply_markup=alert_type_keyboard())
     await callback.answer()
 
 
@@ -355,7 +353,7 @@ async def wizard_toggle_currency(callback: CallbackQuery, state: FSMContext) -> 
     data = await state.get_data()
     native_symbol = data.get("native_symbol")
     if not native_symbol:
-        await callback.answer("This asset is priced in USD only")
+        await callback.answer(t("usd-only"))
         return
     await state.update_data(currency=native_symbol if data.get("currency", "USD") == "USD" else "USD")
     if isinstance(callback.message, Message):
@@ -392,12 +390,12 @@ async def wizard_threshold(message: Message, state: FSMContext, session: AsyncSe
             threshold, unit = parse_amount(text)
             currency = resolve_currency(unit, default=data.get("currency", "USD"), native_symbol=data.get("native_symbol"))
         if not threshold.is_finite() or threshold <= 0 or threshold >= Decimal("1e42"):
-            raise ValueError("Send a valid positive number.")
-    except ValueError as exc:
-        await message.answer(str(exc) or "Send a valid positive number.", reply_markup=wizard_back_keyboard())
+            raise LocalizedError("error-positive-number")
+    except LocalizedError as exc:
+        await message.answer(str(exc), reply_markup=wizard_back_keyboard())
         return
     except Exception:
-        await message.answer("Send a valid positive number.", reply_markup=wizard_back_keyboard())
+        await message.answer(t("error-positive-number"), reply_markup=wizard_back_keyboard())
         return
 
     parsed = _parsed_threshold(data["alert_type"], threshold, currency)
@@ -469,7 +467,7 @@ async def _ensure_callback_access(callback: CallbackQuery, session: AsyncSession
 
     user = await repo.get_user_by_telegram_id(session, callback.from_user.id)
     if not repo.has_bot_access(user):
-        await callback.answer("Access denied", show_alert=True)
+        await callback.answer(t("access-denied"), show_alert=True)
         return False
     return True
 

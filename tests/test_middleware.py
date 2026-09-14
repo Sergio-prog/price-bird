@@ -1,4 +1,9 @@
-from app.bot.middlewares import DbSessionMiddleware
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+from app.bot.middlewares import DbSessionMiddleware, LocaleMiddleware
+from app.bot.middlewares import locale as locale_middleware
+from app.i18n import current_locale
 
 
 class FakeSessionPool:
@@ -33,3 +38,17 @@ async def test_db_session_middleware_injects_session() -> None:
     assert seen["session"] is session_pool.session
     assert session_pool.entered is True
     assert session_pool.exited is True
+
+
+async def test_locale_middleware_prefers_saved_language(monkeypatch) -> None:
+    monkeypatch.setattr(locale_middleware, "get_user_language", AsyncMock(return_value="uk"))
+    seen = {}
+
+    async def handler(event, data):
+        seen["locale"] = current_locale()
+
+    telegram_user = SimpleNamespace(id=1, language_code="ru")
+    await LocaleMiddleware()(handler, object(), {"session": object(), "event_from_user": telegram_user})
+
+    assert seen["locale"] == "uk"
+    assert current_locale() == "en"
