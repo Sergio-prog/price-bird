@@ -17,9 +17,10 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.models import ConnectedApp, Delivery, IntegrationDefinition
+from app.db.models import ConnectedApp, Delivery, IntegrationDefinition, User
 from app.db.repositories.users import get_user_by_telegram_id, has_bot_access
 from app.delivery.events import queue_test
+from app.i18n import LOCALE_NAMES, SUPPORTED_LOCALES, current_locale, t, use_locale
 from app.integrations.access import can_use_connection, can_use_custom_webhooks, can_use_integrations
 from app.integrations.secrets import decrypt_secret, ensure_encryption_configured
 from app.integrations.service import connection_secret, connection_url, create_custom_connection, rotate_custom_secret
@@ -27,6 +28,7 @@ from app.integrations.urls import validate_url
 
 router = Router(name="settings")
 TRENCHBOOK_BOT_URL = "https://t.me/trenches_fotex_bot"
+MAX_CONNECTIONS = 20
 
 
 class ConnectionWizard(StatesGroup):
@@ -40,6 +42,10 @@ def keyboard(rows):
 async def owned_user(session, telegram_id):
     user = await get_user_by_telegram_id(session, telegram_id)
     return user if has_bot_access(user) else None
+
+
+def _state_label(enabled: bool) -> str:
+    return t("state-on" if enabled else "state-off")
 
 
 async def settings_view(session, user):
@@ -67,45 +73,67 @@ async def settings_view(session, user):
                 .order_by(IntegrationDefinition.name)
             )
         )
-    rows = [[(f"Price Bird notifications: {'on' if user.bird_enabled else 'off'}", "settings:bird")]]
-    rows += [[(f"{c.name}: {'on' if c.enabled else 'off'}", f"settings:view:{c.id}")] for c in connections]
+    rows = [
+        [(t("settings-bird", state=_state_label(user.bird_enabled)), "settings:bird")],
+        [(t("settings-language", language=LOCALE_NAMES[current_locale()]), "settings:language")],
+    ]
+    rows += [
+        [(t("settings-connection", name=c.name, state=_state_label(c.enabled)), f"settings:view:{c.id}")] for c in connections
+    ]
     connected_definition_ids = {connection.integration_definition_id for connection in connections}
     rows += [
-        [(f"Connect {definition.name}", f"settings:connect:{definition.id}")]
+        [(t("settings-connect", name=definition.name), f"settings:connect:{definition.id}")]
         for definition in definitions
         if definition.id not in connected_definition_ids
     ]
     if can_use_custom_webhooks(user):
-        rows.append([("Add custom webhook", "settings:add")])
-    rows.append([("Back", "wizard:cancel")])
+        rows.append([(t("settings-add-webhook"), "settings:add")])
+    rows.append([(t("button-back"), "wizard:cancel")])
 
-    text = (
-        "Delivery settings\n\nTurn Price Bird notifications on or off. Turning them off cancels pending Telegram "
-        "deliveries. Alerts keep evaluating. Pause individual alerts from /alerts."
-    )
+    text = t("settings-text")
     if can_use_integrations(user) or can_use_custom_webhooks(user):
-        text = (
-            "Delivery settings\n\nChoose where all your alerts are sent. Turn on Price Bird, a connected app, or both. "
-            "Turning off a destination cancels its pending deliveries. Alerts keep evaluating. "
-            "Pause individual alerts from /alerts."
-        )
+        text = t("settings-text-connections")
     if can_use_integrations(user):
-        text += f'\n\n<a href="{TRENCHBOOK_BOT_URL}">Trenchbook</a> uses your same Telegram account; start its bot first.'
+        text += "\n\n" + t("settings-trenchbook-hint", url=TRENCHBOOK_BOT_URL)
     return text, keyboard(rows)
+
+
+def language_view() -> tuple[str, Markup]:
+    rows = [
+        [(f"{'✅ ' if locale == current_locale() else ''}{LOCALE_NAMES[locale]}", f"settings:language:{locale}")]
+        for locale in SUPPORTED_LOCALES
+    ]
+    rows.append([(t("button-back"), "settings:open")])
+    return t("language-prompt"), keyboard(rows)
 
 
 @router.message(Command("settings"))
 async def open_settings(message: Message, state: FSMContext, session: AsyncSession):
-    if message.chat.type != "private":
-        await message.answer("Open a private chat with Price Bird to manage settings.")
-        return
-    user = await owned_user(session, message.from_user.id) if message.from_user else None
+    user = await _private_user(message, session)
     if not user:
-        await message.answer("Access denied.")
         return
     await state.clear()
     text, markup = await settings_view(session, user)
     await message.answer(text, reply_markup=markup, parse_mode="HTML", disable_web_page_preview=True)
+
+
+@router.message(Command("language"))
+async def open_language(message: Message, state: FSMContext, session: AsyncSession):
+    if not await _private_user(message, session):
+        return
+    await state.clear()
+    text, markup = language_view()
+    await message.answer(text, reply_markup=markup)
+
+
+async def _private_user(message: Message, session: AsyncSession) -> User | None:
+    if message.chat.type != "private":
+        await message.answer(t("settings-private-only"))
+        return None
+    user = await owned_user(session, message.from_user.id) if message.from_user else None
+    if not user:
+        await message.answer(t("access-denied"))
+    return user
 
 
 async def cancel_pending(session, user_id, connection_id=None):
@@ -120,19 +148,22 @@ async def cancel_pending(session, user_id, connection_id=None):
 async def settings_callback(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
     user = await owned_user(session, callback.from_user.id)
     if not user or not isinstance(callback.message, Message):
-        await callback.answer("Access denied", show_alert=True)
+        await callback.answer(t("access-denied"), show_alert=True)
         return
     if callback.message.chat.type != "private":
-        await callback.answer("Open Price Bird in a private chat", show_alert=True)
+        await callback.answer(t("private-chat-required"), show_alert=True)
         return
     parts = callback.data.split(":")
     action = parts[1]
     await state.clear()
+    if action == "language":
+        await _language_callback(callback, session, user, parts)
+        return
     connection = None
     connection_actions = {"view", "toggle", "disconnect", "rotate", "test", "retry"}
     if action in connection_actions:
         if len(parts) != 3:
-            await callback.answer("Invalid connection action")
+            await callback.answer(t("invalid-connection-action"))
             return
         connection = await session.scalar(
             select(ConnectedApp)
@@ -145,10 +176,10 @@ async def settings_callback(callback: CallbackQuery, state: FSMContext, session:
             .with_for_update()
         )
         if not connection:
-            await callback.answer("Connection not found")
+            await callback.answer(t("connection-not-found"))
             return
         if not can_use_connection(user, connection):
-            await callback.answer("This destination is available to admins only.", show_alert=True)
+            await callback.answer(t("admin-only-destination"), show_alert=True)
             return
     if action == "bird":
         await session.refresh(user, with_for_update=True)
@@ -157,7 +188,7 @@ async def settings_callback(callback: CallbackQuery, state: FSMContext, session:
             await cancel_pending(session, user.id)
     elif action == "add":
         if not can_use_custom_webhooks(user):
-            await callback.answer("Custom webhooks are available to admins only.", show_alert=True)
+            await callback.answer(t("admin-only-custom-webhooks"), show_alert=True)
             return
         try:
             ensure_encryption_configured()
@@ -165,17 +196,15 @@ async def settings_callback(callback: CallbackQuery, state: FSMContext, session:
             await callback.answer(str(exc), show_alert=True)
             return
         await state.set_state(ConnectionWizard.url)
-        await callback.message.edit_text(
-            "Send a name and HTTPS webhook URL, for example:\nMy app https://example.com/webhook\n\n/cancel to stop."
-        )
+        await callback.message.edit_text(t("custom-webhook-prompt"))
         await callback.answer()
         return
     elif action == "connect":
         if not can_use_integrations(user):
-            await callback.answer("Integrations are available to admins only.", show_alert=True)
+            await callback.answer(t("admin-only-integrations"), show_alert=True)
             return
         if len(parts) != 3:
-            await callback.answer("Integration not found")
+            await callback.answer(t("integration-not-found"))
             return
         definition = await session.scalar(
             select(IntegrationDefinition)
@@ -183,7 +212,7 @@ async def settings_callback(callback: CallbackQuery, state: FSMContext, session:
             .with_for_update()
         )
         if definition is None:
-            await callback.answer("Integration not found")
+            await callback.answer(t("integration-not-found"))
             return
         try:
             decrypt_secret(definition.secret_encrypted)
@@ -208,8 +237,8 @@ async def settings_callback(callback: CallbackQuery, state: FSMContext, session:
                     ConnectedApp.deleted.is_(False),
                 )
             )
-            if (connected_count or 0) >= 20:
-                await callback.answer("You can connect up to 20 apps.", show_alert=True)
+            if (connected_count or 0) >= MAX_CONNECTIONS:
+                await callback.answer(t("connections-limit", limit=MAX_CONNECTIONS), show_alert=True)
                 return
             connection = ConnectedApp(
                 id=str(uuid4()),
@@ -248,14 +277,11 @@ async def settings_callback(callback: CallbackQuery, state: FSMContext, session:
             await cancel_pending(session, user.id, connection.id)
         elif action == "rotate" and connection.kind == "custom":
             secret = rotate_custom_secret(connection)
-            await callback.message.answer(
-                f"New signing secret. Update your receiver before enabling delivery:\n{secret}",
-                protect_content=True,
-            )
+            await callback.message.answer(t("new-signing-secret", secret=secret), protect_content=True)
             await cancel_pending(session, user.id, connection.id)
         elif action in {"test", "retry"}:
             if not connection.enabled:
-                await callback.answer("Enable this connection first")
+                await callback.answer(t("enable-connection-first"))
                 return
             pending = await session.scalar(
                 select(Delivery.id)
@@ -266,7 +292,7 @@ async def settings_callback(callback: CallbackQuery, state: FSMContext, session:
                 .limit(1)
             )
             if pending:
-                await callback.answer("Delivery already pending")
+                await callback.answer(t("delivery-already-pending"))
                 return
             if action == "test":
                 await queue_test(session, connection, user.telegram_id)
@@ -286,62 +312,87 @@ async def settings_callback(callback: CallbackQuery, state: FSMContext, session:
                     failed.status, failed.attempts, failed.next_attempt_at = "pending", 0, datetime.now(UTC)
     await session.commit()
     if connection and not connection.deleted:
-        last = await session.scalar(
-            select(Delivery).where(Delivery.connection_id == connection.id).order_by(Delivery.created_at.desc()).limit(1)
-        )
-        try:
-            host = urlsplit(connection_url(connection)).hostname
-        except ValueError:
-            host = "unavailable"
-        name = escape(connection.name)
-        if connection.integration_definition and connection.integration_definition.slug == "trenchbook":
-            name = f'<a href="{TRENCHBOOK_BOT_URL}">{name}</a>'
-        text = f"{name}\nHost: {escape(host or 'unavailable')}\nNotifications: {'on' if connection.enabled else 'off'}"
-        if last:
-            text += f"\nLast delivery: {escape(last.status)}" + (f" ({escape(last.last_error)})" if last.last_error else "")
-        rows = [
-            [("Disable" if connection.enabled else "Enable", f"settings:toggle:{connection.id}")],
-            [("Send test", f"settings:test:{connection.id}"), ("Retry last failure", f"settings:retry:{connection.id}")],
-        ]
-        if connection.kind == "custom":
-            rows.append([("Rotate signing secret", f"settings:rotate:{connection.id}")])
-        rows += [[("Disconnect", f"settings:disconnect:{connection.id}")], [("Back", "settings:open")]]
-        markup = keyboard(rows)
+        text, markup = await _connection_view(session, connection)
     else:
         text, markup = await settings_view(session, user)
+    await _edit(callback.message, text, markup)
+    await callback.answer()
+
+
+async def _language_callback(callback: CallbackQuery, session: AsyncSession, user: User, parts: list[str]) -> None:
+    if len(parts) == 3 and parts[2] in SUPPORTED_LOCALES:
+        user.language = parts[2]
+        await session.commit()
+        with use_locale(user.language):
+            text, markup = await settings_view(session, user)
+            await _edit(callback.message, text, markup)
+            await callback.answer()
+        return
+    text, markup = language_view()
+    await _edit(callback.message, text, markup)
+    await callback.answer()
+
+
+async def _connection_view(session: AsyncSession, connection: ConnectedApp) -> tuple[str, Markup]:
+    last = await session.scalar(
+        select(Delivery).where(Delivery.connection_id == connection.id).order_by(Delivery.created_at.desc()).limit(1)
+    )
     try:
-        await callback.message.edit_text(
-            text,
-            reply_markup=markup,
-            parse_mode="HTML",
-            disable_web_page_preview=True,
-        )
+        host = urlsplit(connection_url(connection)).hostname
+    except ValueError:
+        host = None
+    name = escape(connection.name)
+    if connection.integration_definition and connection.integration_definition.slug == "trenchbook":
+        name = f'<a href="{TRENCHBOOK_BOT_URL}">{name}</a>'
+    lines = [
+        name,
+        t("connection-host", host=escape(host or t("host-unavailable"))),
+        t("connection-notifications", state=_state_label(connection.enabled)),
+    ]
+    if last:
+        status = escape(last.status) + (f" ({escape(last.last_error)})" if last.last_error else "")
+        lines.append(t("connection-last-delivery", status=status))
+    rows = [
+        [(t("button-disable" if connection.enabled else "button-enable"), f"settings:toggle:{connection.id}")],
+        [
+            (t("button-send-test"), f"settings:test:{connection.id}"),
+            (t("button-retry-failure"), f"settings:retry:{connection.id}"),
+        ],
+    ]
+    if connection.kind == "custom":
+        rows.append([(t("button-rotate-secret"), f"settings:rotate:{connection.id}")])
+    rows += [[(t("button-disconnect"), f"settings:disconnect:{connection.id}")], [(t("button-back"), "settings:open")]]
+    return "\n".join(lines), keyboard(rows)
+
+
+async def _edit(message: Message, text: str, markup: Markup) -> None:
+    try:
+        await message.edit_text(text, reply_markup=markup, parse_mode="HTML", disable_web_page_preview=True)
     except TelegramBadRequest as exc:
         if "message is not modified" not in str(exc):
             raise
-    await callback.answer()
 
 
 @router.message(ConnectionWizard.url, ~F.text.startswith("/"))
 async def add_custom(message: Message, state: FSMContext, session: AsyncSession):
     if message.chat.type != "private":
-        await message.answer("Open a private chat with Price Bird to manage settings.")
+        await message.answer(t("settings-private-only"))
         return
     user = await owned_user(session, message.from_user.id) if message.from_user else None
     if not user:
         return
     if not can_use_custom_webhooks(user):
         await state.clear()
-        await message.answer("Custom webhooks are available to admins only.")
+        await message.answer(t("admin-only-custom-webhooks"))
         return
     text = (message.text or "").strip()
     try:
         name, url = text.rsplit(" ", 1)
         if not name or len(name) > 80:
-            raise ValueError("Use a name with at most 80 characters.")
+            raise ValueError(t("webhook-name-too-long"))
         url = validate_url(url)
     except ValueError as exc:
-        await message.answer(str(exc) if " " in text else "Send a name followed by the HTTPS URL.")
+        await message.answer(str(exc) if " " in text else t("webhook-name-and-url"))
         return
     await session.refresh(user, with_for_update=True)
     connections = list(
@@ -352,8 +403,8 @@ async def add_custom(message: Message, state: FSMContext, session: AsyncSession)
             )
         )
     )
-    if len(connections) >= 20:
-        await message.answer("You can connect up to 20 apps.")
+    if len(connections) >= MAX_CONNECTIONS:
+        await message.answer(t("connections-limit", limit=MAX_CONNECTIONS))
         return
     try:
         connection, secret = create_custom_connection(user_id=user.id, name=name, url=url)
@@ -363,10 +414,6 @@ async def add_custom(message: Message, state: FSMContext, session: AsyncSession)
     session.add(connection)
     await session.commit()
     await state.clear()
-    await message.answer(
-        f"Connected {name}. Store this signing secret in your receiver:\n{secret}\n\n"
-        "Requests use HMAC-SHA256. Configure your receiver, then enable the connection in Settings.",
-        protect_content=True,
-    )
+    await message.answer(t("custom-webhook-connected", name=name, secret=secret), protect_content=True)
     text, markup = await settings_view(session, user)
     await message.answer(text, reply_markup=markup)

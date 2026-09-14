@@ -7,6 +7,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from app.alerts.formatting import format_direction_arrows, format_percent, format_threshold
 from app.db.enums import AlertStatus, AlertType
 from app.db.models import Alert
+from app.i18n import t
 from app.providers.base import AssetCandidate
 
 ALERTS_PAGE_SIZE = 8
@@ -15,10 +16,10 @@ ALERTS_PAGE_SIZE = 8
 def start_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🔔 New alert", callback_data="menu:newalert")],
-            [InlineKeyboardButton(text="📌 Active alerts", callback_data="menu:alerts")],
-            [InlineKeyboardButton(text="📚 Examples", callback_data="menu:examples")],
-            [InlineKeyboardButton(text="Settings / connected apps", callback_data="settings:open")],
+            [InlineKeyboardButton(text=t("menu-new-alert"), callback_data="menu:newalert")],
+            [InlineKeyboardButton(text=t("menu-active-alerts"), callback_data="menu:alerts")],
+            [InlineKeyboardButton(text=t("menu-examples"), callback_data="menu:examples")],
+            [InlineKeyboardButton(text=t("menu-settings"), callback_data="settings:open")],
         ]
     )
 
@@ -26,8 +27,8 @@ def start_menu_keyboard() -> InlineKeyboardMarkup:
 def asset_type_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🪙 Coins / CEX", callback_data="asset_type:token")],
-            [InlineKeyboardButton(text="🖼 NFT floor", callback_data="asset_type:nft")],
+            [InlineKeyboardButton(text=t("asset-type-token"), callback_data="asset_type:token")],
+            [InlineKeyboardButton(text=t("asset-type-nft"), callback_data="asset_type:nft")],
             _menu_button_row(),
         ]
     )
@@ -59,11 +60,11 @@ def asset_candidates_keyboard(candidates: list[AssetCandidate], *, back_to_menu:
 def alert_type_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📈 Move % up/down", callback_data="alert_type:percent")],
-            [InlineKeyboardButton(text="🚀 Breaks above", callback_data="alert_type:above")],
-            [InlineKeyboardButton(text="🩸 Drops below", callback_data="alert_type:below")],
-            [InlineKeyboardButton(text="Market cap above", callback_data="alert_type:mcap_above")],
-            [InlineKeyboardButton(text="Market cap below", callback_data="alert_type:mcap_below")],
+            [InlineKeyboardButton(text=t("alert-type-percent"), callback_data="alert_type:percent")],
+            [InlineKeyboardButton(text=t("alert-type-above"), callback_data="alert_type:above")],
+            [InlineKeyboardButton(text=t("alert-type-below"), callback_data="alert_type:below")],
+            [InlineKeyboardButton(text=t("alert-type-mcap-above"), callback_data="alert_type:mcap_above")],
+            [InlineKeyboardButton(text=t("alert-type-mcap-below"), callback_data="alert_type:mcap_below")],
             _wizard_nav_row(),
         ]
     )
@@ -74,11 +75,13 @@ def threshold_keyboard(
 ) -> InlineKeyboardMarkup:
     rows = []
     if alert_type == "percent":
-        rows.append([InlineKeyboardButton(text="Default (10%)", callback_data="threshold:default_percent")])
+        rows.append([InlineKeyboardButton(text=t("button-default-percent"), callback_data="threshold:default_percent")])
     if alert_type.startswith("mcap_"):
         rows.append([InlineKeyboardButton(text=one_time_label(one_time), callback_data="threshold:toggle_once")])
     if alert_type != "percent" and native_symbol:
-        rows.append([InlineKeyboardButton(text=f"Currency: {currency}", callback_data="threshold:toggle_currency")])
+        rows.append(
+            [InlineKeyboardButton(text=t("button-currency", currency=currency), callback_data="threshold:toggle_currency")]
+        )
     rows.append(_wizard_nav_row())
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -86,9 +89,9 @@ def threshold_keyboard(
 def alert_created_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="➕ Add another", callback_data="menu:newalert")],
-            [InlineKeyboardButton(text="📌 Active alerts", callback_data="menu:alerts")],
-            [InlineKeyboardButton(text="🏠 Menu", callback_data="wizard:cancel")],
+            [InlineKeyboardButton(text=t("button-add-another"), callback_data="menu:newalert")],
+            [InlineKeyboardButton(text=t("menu-active-alerts"), callback_data="menu:alerts")],
+            [InlineKeyboardButton(text=t("button-menu"), callback_data="wizard:cancel")],
         ]
     )
 
@@ -120,7 +123,7 @@ def alert_list_keyboard(alerts: list[Alert], *, page: int = 1, page_size: int = 
 
 
 def alert_button_label(alert: Alert, index: int) -> str:
-    symbol = alert.asset.symbol if alert.asset else "asset"
+    symbol = alert.asset.symbol if alert.asset else t("asset-fallback")
     currency = getattr(alert, "threshold_currency", None) or "USD"
     exact = format_threshold(alert.type, alert.threshold_value, currency)
     compact = format_threshold(alert.type, alert.threshold_value, currency, compact=True)
@@ -131,9 +134,9 @@ def alert_button_label(alert: Alert, index: int) -> str:
     elif alert.type == AlertType.PRICE_BELOW.value:
         condition = f"< {exact}"
     elif alert.type == AlertType.MCAP_ABOVE.value:
-        condition = f"MC > {compact}"
+        condition = f"{t('market-cap-short')} > {compact}"
     elif alert.type == AlertType.MCAP_BELOW.value:
-        condition = f"MC < {compact}"
+        condition = f"{t('market-cap-short')} < {compact}"
     else:
         condition = f"±{exact}"
     label = f"{index}. {symbol} {condition}"
@@ -143,17 +146,17 @@ def alert_button_label(alert: Alert, index: int) -> str:
 
 
 def one_time_label(one_time: bool) -> str:
-    return f"One time: {'✅' if one_time else '❌'}"
+    return t("button-one-time", state="✅" if one_time else "❌")
 
 
 def _menu_button_row() -> list[InlineKeyboardButton]:
-    return [InlineKeyboardButton(text="↩️ Back to menu", callback_data="wizard:cancel")]
+    return [InlineKeyboardButton(text=t("button-back-to-menu"), callback_data="wizard:cancel")]
 
 
 def _wizard_nav_row() -> list[InlineKeyboardButton]:
     return [
-        InlineKeyboardButton(text="↩️ Back", callback_data="wizard:back"),
-        InlineKeyboardButton(text="🏠 Menu", callback_data="wizard:cancel"),
+        InlineKeyboardButton(text=t("button-back"), callback_data="wizard:back"),
+        InlineKeyboardButton(text=t("button-menu"), callback_data="wizard:cancel"),
     ]
 
 

@@ -9,7 +9,7 @@ from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_applicati
 from aiohttp import web
 
 from app.bot.handlers import setup_handlers
-from app.bot.middlewares import DbSessionMiddleware
+from app.bot.middlewares import DbSessionMiddleware, LocaleMiddleware
 from app.core.config import settings
 from app.db.session import SessionLocal
 from app.providers.registry import provider_registry
@@ -21,6 +21,7 @@ def build_dispatcher() -> Dispatcher:
     storage = RedisStorage.from_url(settings.redis_url)
     dispatcher = Dispatcher(storage=storage)
     dispatcher.update.middleware(DbSessionMiddleware(SessionLocal))
+    dispatcher.update.middleware(LocaleMiddleware())
     dispatcher.include_router(setup_handlers())
 
     return dispatcher

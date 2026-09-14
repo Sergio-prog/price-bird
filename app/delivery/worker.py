@@ -18,7 +18,6 @@ from app.alerts.formatting import (
     format_amount,
     format_change,
     format_decimal,
-    format_direction,
     format_percent,
     format_threshold,
 )
@@ -29,6 +28,7 @@ from app.db.repositories.users import has_bot_access
 from app.db.session import SessionLocal
 from app.delivery.legacy import route_legacy_events
 from app.delivery.webhook import DeliveryError, send_webhook
+from app.i18n import resolve_locale, t, use_locale
 from app.integrations.access import can_use_connection
 
 logger = logging.getLogger(__name__)
@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 def render_payload(payload: dict) -> str:
     if payload["type"] == "connection.test":
-        return "Price Bird connection test. No alert was triggered."
+        return t("notification-test")
     asset, observation, rule, trigger = payload["asset"], payload["observation"], payload["rule"], payload["trigger"]
     links = _safe_links(payload.get("links") or {})
     source = observation["source"]
@@ -45,16 +45,16 @@ def render_payload(payload: dict) -> str:
     lines = [
         f"🔔 <b>{escape(asset['symbol'])}</b> {_format_change(trigger)}",
         "",
-        f"<b>Rule:</b> {_format_rule(rule)}",
+        t("notification-rule", rule=_format_rule(rule)),
         _format_observation(asset, observation),
         *_format_market_cap(observation),
         "",
-        f"<b>Source:</b> {source_text}",
+        t("notification-source", source=source_text),
     ]
     if links:
-        lines.append(f"<b>Links:</b> {format_links(links)}")
+        lines.append(t("notification-links", links=format_links(links)))
     if payload.get("note"):
-        lines.append(f"<b>Note:</b> {escape(payload['note'])}")
+        lines.append(t("notification-note", note=escape(payload["note"])))
     return "\n".join(lines)
 
 
@@ -66,19 +66,21 @@ def _format_rule(rule: dict) -> str:
         return f"{escape(alert_type.replace('_', ' ').capitalize())} {escape(str(rule['threshold']))}"
 
     if alert_type == AlertType.PERCENT_CHANGE.value:
-        direction = format_direction(rule.get("direction") or "both").lower()
-        return f"{format_percent(threshold)} move {escape(direction)}"
+        direction = rule.get("direction") if rule.get("direction") in {"up", "down"} else "both"
+        return t(f"rule-percent-{direction}", threshold=format_percent(threshold))
 
     compact = alert_type in {AlertType.MCAP_ABOVE.value, AlertType.MCAP_BELOW.value}
-    formatted = format_threshold(alert_type, threshold, rule.get("threshold_currency") or "USD", compact=compact)
-    labels = {
-        AlertType.PRICE_ABOVE.value: "Price above",
-        AlertType.PRICE_BELOW.value: "Price below",
-        AlertType.MCAP_ABOVE.value: "Market cap above",
-        AlertType.MCAP_BELOW.value: "Market cap below",
-        AlertType.ABSOLUTE_CHANGE.value: "Price change of",
+    formatted = escape(format_threshold(alert_type, threshold, rule.get("threshold_currency") or "USD", compact=compact))
+    keys = {
+        AlertType.PRICE_ABOVE.value: "rule-price-above",
+        AlertType.PRICE_BELOW.value: "rule-price-below",
+        AlertType.MCAP_ABOVE.value: "rule-mcap-above",
+        AlertType.MCAP_BELOW.value: "rule-mcap-below",
+        AlertType.ABSOLUTE_CHANGE.value: "rule-absolute",
     }
-    return f"{labels.get(alert_type, alert_type.replace('_', ' ').capitalize())} {escape(formatted)}"
+    if alert_type not in keys:
+        return f"{escape(alert_type.replace('_', ' ').capitalize())} {formatted}"
+    return t(keys[alert_type], threshold=formatted)
 
 
 def _format_observation(asset: dict, observation: dict) -> str:
@@ -86,8 +88,8 @@ def _format_observation(asset: dict, observation: dict) -> str:
     if asset.get("kind") == AssetType.NFT_COLLECTION.value and observation.get("price_native"):
         native = _format_decimal_value(observation["price_native"])
         symbol = escape(observation.get("native_symbol") or "")
-        return f"<b>Floor price:</b> {native} {symbol} ({usd})"
-    return f"<b>Price:</b> {usd}"
+        return t("notification-floor", native=native, symbol=symbol, usd=usd)
+    return t("notification-price", price=usd)
 
 
 def _format_market_cap(observation: dict) -> list[str]:
@@ -95,7 +97,7 @@ def _format_market_cap(observation: dict) -> list[str]:
         market_cap = Decimal(observation.get("market_cap_usd") or "")
     except (InvalidOperation, TypeError, ValueError):
         return []
-    return [f"<b>Market cap:</b> {format_amount(market_cap, compact=True)}"]
+    return [t("notification-market-cap", value=format_amount(market_cap, compact=True))]
 
 
 def _format_change(trigger: dict) -> str:
@@ -179,9 +181,9 @@ async def process_delivery(delivery: Delivery, bot: Bot) -> None:
             elif connection:
                 await send_webhook(connection, delivery.id, delivery.payload)
             else:
-                await bot.send_message(
-                    user.telegram_id, render_payload(delivery.payload), parse_mode="HTML", request_timeout=10
-                )
+                with use_locale(resolve_locale(user.language, user.language_code)):
+                    text = render_payload(delivery.payload)
+                await bot.send_message(user.telegram_id, text, parse_mode="HTML", request_timeout=10)
     except TelegramRetryAfter as exc:
         status, error, delay = "pending", "Telegram rate limit", exc.retry_after
     except (TelegramForbiddenError, TelegramBadRequest):

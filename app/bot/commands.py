@@ -4,35 +4,42 @@ from dataclasses import dataclass
 
 from aiogram.types import BotCommand
 
+from app.i18n import t, translate
+
 
 @dataclass(frozen=True)
 class CommandSpec:
     command: str
-    description: str
     admin_only: bool = False
 
 
 BOT_COMMANDS: tuple[CommandSpec, ...] = (
-    CommandSpec("start", "Open main menu"),
-    CommandSpec("help", "Show available commands"),
-    CommandSpec("newalert", "Create an alert step by step"),
-    CommandSpec("alert", "Create alert from text, e.g. BTC 10%"),
-    CommandSpec("examples", "Show alert examples"),
-    CommandSpec("alerts", "Manage alerts"),
-    CommandSpec("settings", "Manage notification delivery"),
-    CommandSpec("deletealert", "Delete alert by id"),
-    CommandSpec("cancel", "Cancel current action"),
-    CommandSpec("stats", "Show bot stats", admin_only=True),
-    CommandSpec("users", "List users", admin_only=True),
-    CommandSpec("whitelist", "Allow user by Telegram id", admin_only=True),
-    CommandSpec("suspend", "Suspend user by Telegram id", admin_only=True),
-    CommandSpec("promote", "Promote user to admin", admin_only=True),
+    CommandSpec("start"),
+    CommandSpec("help"),
+    CommandSpec("newalert"),
+    CommandSpec("alert"),
+    CommandSpec("examples"),
+    CommandSpec("alerts"),
+    CommandSpec("settings"),
+    CommandSpec("language"),
+    CommandSpec("deletealert"),
+    CommandSpec("cancel"),
+    CommandSpec("stats", admin_only=True),
+    CommandSpec("users", admin_only=True),
+    CommandSpec("whitelist", admin_only=True),
+    CommandSpec("suspend", admin_only=True),
+    CommandSpec("promote", admin_only=True),
 )
 
 
-def bot_commands(*, include_admin: bool = False) -> list[BotCommand]:
+def command_description(command: CommandSpec, locale: str | None = None) -> str:
+    key = f"command-{command.command}"
+    return t(key) if locale is None else translate(locale, key)
+
+
+def bot_commands(*, include_admin: bool = False, locale: str | None = None) -> list[BotCommand]:
     return [
-        BotCommand(command=command.command, description=command.description)
+        BotCommand(command=command.command, description=command_description(command, locale))
         for command in BOT_COMMANDS
         if include_admin or not command.admin_only
     ]

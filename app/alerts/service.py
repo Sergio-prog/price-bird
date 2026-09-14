@@ -7,12 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.alerts.evaluator import evaluate_alert
 from app.alerts.formatting import format_percent, format_threshold
+from app.alerts.limits import ensure_alert_capacity
 from app.alerts.parser import ParsedAlertCommand
 from app.db import repositories as repo
 from app.db.enums import AlertType, AssetType
 from app.db.models import Alert, Asset
 from app.delivery.events import queue_event
 from app.providers.base import PriceQuote
+from app.i18n import LocalizedError, t
 from app.providers.registry import provider_registry
 from app.utils.amounts import resolve_currency
 from app.utils.currency import canonical_symbol
@@ -34,15 +36,16 @@ async def create_alert_from_command(
         or parsed.threshold_value >= Decimal("1e42")
         or parsed.threshold_value.as_tuple().exponent < -36
     ):
-        raise ValueError("Threshold must be positive, finite and fit within 36 decimal places")
+        raise LocalizedError("error-threshold-range")
     quote = await provider_registry.get_price(selected_asset)
     if not quote.price_usd.is_finite() or quote.price_usd <= 0:
-        raise ValueError("No valid price available")
+        raise LocalizedError("error-no-price")
     if parsed.alert_type in {AlertType.MCAP_ABOVE, AlertType.MCAP_BELOW} and (
         quote.market_cap_usd is None or quote.market_cap_usd <= 0
     ):
-        raise ValueError("Actual market cap is unavailable for this asset")
+        raise LocalizedError("error-mcap-unavailable")
     threshold_currency = threshold_currency_for(parsed, selected_asset, quote)
+    await ensure_alert_capacity(session, user_id=user_id, asset=selected_asset)
     await repo.create_snapshot(
         session,
         asset_id=selected_asset.id,
@@ -129,17 +132,17 @@ async def evaluate_asset_quote(session: AsyncSession, asset: Asset, quote: Price
 
 
 def describe_alert(alert: Alert) -> str:
-    symbol = alert.asset.symbol if alert.asset else "asset"
+    symbol = alert.asset.symbol if alert.asset else t("asset-fallback")
+    if alert.type == AlertType.PERCENT_CHANGE.value:
+        return t("describe-percent", symbol=symbol, threshold=format_percent(alert.threshold_value))
     threshold = format_threshold(alert.type, alert.threshold_value, alert_currency(alert))
-    if alert.type == "percent_change":
-        return f"{symbol} moves {format_percent(alert.threshold_value)} up or down"
-    if alert.type == "price_above":
-        return f"{symbol} above {threshold}"
-    if alert.type == "price_below":
-        return f"{symbol} below {threshold}"
-    if alert.type in {"mcap_above", "mcap_below"}:
-        return f"{symbol} market cap {'above' if alert.type == 'mcap_above' else 'below'} {threshold}"
-    return f"{symbol} absolute change {threshold}"
+    key = {
+        AlertType.PRICE_ABOVE.value: "describe-price-above",
+        AlertType.PRICE_BELOW.value: "describe-price-below",
+        AlertType.MCAP_ABOVE.value: "describe-mcap-above",
+        AlertType.MCAP_BELOW.value: "describe-mcap-below",
+    }.get(alert.type, "describe-absolute")
+    return t(key, symbol=symbol, threshold=threshold)
 
 
 def alert_currency(alert: Alert) -> str:
@@ -148,7 +151,7 @@ def alert_currency(alert: Alert) -> str:
 
 def asset_kind_label(asset: Asset) -> str:
     if asset.type == AssetType.NFT_COLLECTION.value:
-        return "NFT floor"
+        return t("market-nft")
     if asset.type == AssetType.CEX_SYMBOL.value:
-        return "CEX"
-    return asset.chain or "token"
+        return t("market-cex")
+    return asset.chain or t("market-token")

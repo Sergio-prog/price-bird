@@ -1,0 +1,349 @@
+## Commands and profile
+
+command-start = Открыть главное меню
+command-help = Показать список команд
+command-newalert = Создать алерт по шагам
+command-alert = Создать алерт текстом, напр. BTC 10%
+command-examples = Показать примеры алертов
+command-alerts = Управление алертами
+command-settings = Настройки уведомлений
+command-language = Сменить язык
+command-deletealert = Удалить алерт по id
+command-cancel = Отменить текущее действие
+command-stats = Показать статистику бота
+command-users = Список пользователей
+command-whitelist = Разрешить доступ по Telegram id
+command-suspend = Заблокировать по Telegram id
+command-promote = Назначить админом
+
+profile-description =
+    Price Bird следит за ценами токенов, CEX-парами, капитализацией и флорами NFT — и присылает уведомление в Telegram, когда срабатывает твоё правило.
+
+    Создавай алерты на процент, пробой вверх или вниз. Настраивай одноразовые или повторяющиеся уведомления, кулдауны, срок действия и заметки. Данные берутся у живых рыночных провайдеров: если данных нет, цена не выдумывается.
+
+    Используй /newalert, чтобы пройти шаги, или /alert BTC 10% для быстрого алерта.
+profile-short-description = Алерты на токены, CEX, капитализацию и флоры NFT. Задай правило — Price Bird последит за ним.
+
+## Start, help and examples
+
+start-name-fallback = друг
+start =
+    👋 <b>{ $name }</b>, добро пожаловать в <b>Price Bird</b>.
+
+    Ставь алерты на токены, CEX-пары, капитализацию и флоры NFT. Price Bird следит за рыночными данными в реальном времени и пишет тебе, когда срабатывает правило.
+
+    Выбери вариант ниже или отправь <code>/alert BTC 10%</code>, чтобы начать.
+
+    📣 <a href="{ $channel_url }">Канал</a>
+help-title = <b>Доступные команды</b>
+examples =
+    <b>Примеры</b>
+
+    <b>Быстрая команда</b>
+    <code>/alert BTC 10%</code>
+    <code>/alert ETH &gt; 4000</code>
+    <code>/alert SOL &lt; 120</code>
+    <code>/alert PEPE 15%</code>
+    <code>/alert BTC/USDT &lt; 90000</code>
+
+    <b>Флоры NFT</b>
+    <code>/alert milady floor 10%</code>
+    <code>/alert pudgy penguins floor 15%</code>
+    <code>/alert boredapeyachtclub floor &lt; 8</code>
+
+    <b>По шагам</b>
+    Используй <code>/newalert</code>, если поиск даёт много совпадений или нужны кнопки.
+
+## Access
+
+access-denied = Доступ запрещён.
+access-denied-whitelist = Доступ запрещён. Попроси админа добавить твой Telegram ID в вайтлист.
+access-pending = Доступ на рассмотрении.
+access-pending-whitelist = Доступ на рассмотрении. Попроси админа добавить твой Telegram ID в вайтлист.
+admin-required = Нужны права админа.
+private-chat-required = Открой Price Bird в личном чате.
+
+## Main menu and navigation
+
+menu-new-alert = 🔔 Новый алерт
+menu-active-alerts = 📌 Активные алерты
+menu-examples = 📚 Примеры
+menu-settings = ⚙️ Настройки
+button-back = ↩️ Назад
+button-back-to-menu = ↩️ Назад в меню
+button-menu = 🏠 Меню
+button-add-another = ➕ Добавить ещё
+
+## Alert wizard
+
+asset-type-prompt = За каким рынком следим?
+asset-type-token = 🪙 Монеты / CEX
+asset-type-nft = 🖼 Флор NFT
+query-prompt-token = 🔎 Отправь тикер, контракт или CEX-пару. Например: <code>BONK</code> или <code>BTC</code>
+query-prompt-nft = 🖼 Отправь название коллекции NFT. Например: <code>milady</code>
+provider-failed-token = Не удалось найти активы. Провайдер сейчас недоступен. Попробуй позже.
+provider-failed-nft = Не удалось найти коллекции NFT. Провайдер сейчас недоступен. Попробуй позже.
+provider-misconfigured-token = Поиск активов недоступен: провайдер не настроен. Попроси админа проверить настройки бота.
+provider-misconfigured-nft = Поиск NFT недоступен: отсутствует или истёк ключ OpenSea API. Попроси админа обновить его.
+no-matches-token = Активы не найдены. Попробуй тикер, адрес контракта или более короткое название.
+no-matches-nft = Коллекции не найдены. Попробуй slug коллекции или более короткое название.
+candidates-prompt = Выбери актив для отслеживания:
+alert-type-prompt = Выбери, когда алерт должен сработать:
+alert-type-percent = 📈 Изменение %
+alert-type-above = 🚀 Пробой вверх
+alert-type-below = 🩸 Падение ниже
+alert-type-mcap-above = Капитализация выше
+alert-type-mcap-below = Капитализация ниже
+threshold-percent =
+    <b>{ $asset }</b>
+
+    Введи % изменения цены для уведомлений:
+threshold-above =
+    <b>{ $asset }</b>
+
+    Введи цену в { $currency }, при пробое выше которой сработает алерт:
+    { $hint }
+threshold-below =
+    <b>{ $asset }</b>
+
+    Введи цену в { $currency }, при падении ниже которой сработает алерт:
+    { $hint }
+threshold-mcap =
+    <b>{ $asset }</b>
+
+    Введи фактическую капитализацию в { $currency }. FDV не используется.
+    Одноразовый: алерт удаляется после первого срабатывания. Иначе он перезаряжается и повторяется.
+    { $hint }
+threshold-unit-hint = Сокращения: 100k, 23m, 1b. Добавь единицу, чтобы задать другую валюту, напр. <code>$0.023</code>.
+threshold-unit-hint-native = Сокращения: 100k, 23m, 1b. Добавь единицу, чтобы задать другую валюту, напр. <code>$0.023</code> или <code>1.2 { $symbol }</code>.
+button-default-percent = По умолчанию (10%)
+button-currency = Валюта: { $currency }
+button-one-time = Одноразовый: { $state }
+usd-only = Этот актив торгуется только в USD.
+
+## Alert creation
+
+alert-create-failed = Не удалось создать алерт: { $reason }
+alert-created =
+    ✅ <b>{ $symbol }</b> добавлен в список отслеживания.
+
+    Условие: { $condition }
+    Базовая цена: { $baseline }
+    Рынок: { $market }
+    Режим: { $mode }
+mode-repeat = повторяющийся
+mode-one-time = одноразовый
+condition-percent = Изменение { $threshold } в любую сторону
+condition-price-above = Цена выше { $threshold }
+condition-price-below = Цена ниже { $threshold }
+condition-mcap-above = Капитализация выше { $threshold }
+condition-mcap-below = Капитализация ниже { $threshold }
+condition-default = Ценовой алерт
+
+## Alert limits
+
+limit-user-token =
+    { $limit ->
+        [one] Максимум { $limit } алерт на токены. Удали алерт, чтобы добавить новый.
+        [few] Максимум { $limit } алерта на токены. Удали алерт, чтобы добавить новый.
+        [many] Максимум { $limit } алертов на токены. Удали алерт, чтобы добавить новый.
+       *[other] Максимум { $limit } алерта на токены. Удали алерт, чтобы добавить новый.
+    }
+limit-user-nft =
+    { $limit ->
+        [one] Максимум { $limit } алерт на NFT. Удали алерт, чтобы добавить новый.
+        [few] Максимум { $limit } алерта на NFT. Удали алерт, чтобы добавить новый.
+        [many] Максимум { $limit } алертов на NFT. Удали алерт, чтобы добавить новый.
+       *[other] Максимум { $limit } алерта на NFT. Удали алерт, чтобы добавить новый.
+    }
+limit-global-alerts-token = Price Bird достиг лимита алертов на токены. Попробуй позже.
+limit-global-alerts-nft = Price Bird достиг лимита алертов на NFT. Попробуй позже.
+limit-global-assets-token = Price Bird уже отслеживает максимальное число токенов. Добавь алерт на уже отслеживаемый токен или попробуй позже.
+limit-global-assets-nft = Price Bird уже отслеживает максимальное число коллекций NFT. Добавь алерт на уже отслеживаемую коллекцию или попробуй позже.
+
+## Alert list
+
+no-alerts = Тут пока пусто. Используй <code>/alert BTC 10%</code> или создай алерт в меню.
+alerts-list =
+    📌 <b>Активные алерты</b> ({ $total })
+    Нажми на алерт, чтобы изменить его.
+delete-alert-usage = Использование: /deletealert 123
+active-alert-not-found = Активный алерт не найден.
+alert-deleted = Алерт #{ $id } удалён.
+nothing-to-cancel = Нечего отменять.
+asset-fallback = актив
+market-cap-short = Кап.
+
+## Alert descriptions
+
+describe-percent = { $symbol }: изменение { $threshold }
+describe-price-above = { $symbol } выше { $threshold }
+describe-price-below = { $symbol } ниже { $threshold }
+describe-mcap-above = { $symbol }: капитализация выше { $threshold }
+describe-mcap-below = { $symbol }: капитализация ниже { $threshold }
+describe-absolute = { $symbol }: изменение на { $threshold }
+market-token = токен
+market-cex = CEX
+market-nft = флор NFT
+direction-up = Вверх
+direction-down = Вниз
+direction-both = Вверх или вниз
+
+## Alert settings
+
+invalid-alert = Некорректный алерт.
+alert-not-found = Алерт не найден.
+alert-not-editable = Алерт больше нельзя редактировать.
+alert-deleted-toast = Удалено
+clear-expiry-before-resume = Сначала убери срок действия, потом возобнови.
+field-market = Рынок: { $value }
+field-status = Статус: { $value }
+field-mode = Режим: { $value }
+field-threshold = Порог: { $value }
+field-baseline = Базовая цена: { $value }
+field-cooldown = Кулдаун: { $value }
+field-direction = Направление: { $value }
+field-expires = Срок действия: { $value }
+field-note = Заметка: { $value }
+status-active = ▶️ активен
+status-paused = ⏸ на паузе
+note-none = нет
+mode-one-time-removed = одноразовый, удаляется после срабатывания
+mode-repeat-rebase = повторяющийся, базовая цена сдвигается к цене срабатывания
+mode-repeat-reset = повторяющийся, срабатывает снова после сброса условия
+button-pause = ⏸ Пауза
+button-resume = ▶️ Возобновить
+button-cooldown = ⏱ Кулдаун: { $value }
+button-direction = Направление: { $value }
+button-threshold = ✏️ Порог
+button-note = 📝 Заметка
+button-expires = ⏳ Срок: { $value }
+button-delete = 🗑 Удалить
+button-confirm-delete = ✅ Да, удалить
+button-back-to-alerts = ↩️ Назад к алертам
+confirm-delete = 🗑 Удалить <b>{ $description }</b>?
+expiry-never = никогда
+expiry-expired = истёк
+expiry-in = через { $duration }
+expiry-at = { $date } (через { $duration })
+prompt-note = Отправь заметку, до 300 символов. Отправь -, чтобы её очистить.
+prompt-cooldown = Отправь кулдаун, например 15m, 2h или 1d. Текущий: { $current }
+prompt-expiry = Отправь срок действия, например 24h, 2d, 3mo или 1y. Отправь -, чтобы алерт не истекал. Текущий: { $current }
+prompt-threshold-percent = Отправь новый порог в %. Текущий: { $current }
+prompt-threshold-price = Отправь новую цену в { $units }. Текущая: { $current }
+prompt-threshold-mcap = Отправь новую капитализацию в { $units }. Текущая: { $current }
+units-usd = USD (напр. $0.023, 23m)
+units-native = USD или { $symbol } (напр. $0.023, 23m, 1.2 { $symbol })
+
+## Input errors
+
+error-positive-number = Отправь корректное положительное число.
+error-threshold-format = Отправь положительное конечное число не более чем с 36 знаками после запятой.
+error-threshold-range = Порог должен быть положительным, конечным и не более чем с 36 знаками после запятой.
+error-amount-format = Отправь число вида 0.023, 100k, 23m, 1b, можно с единицей: $0.023, 1.2 ETH.
+error-amount-not-positive = Значение должно быть положительным числом.
+error-invalid-number = Некорректное число: { $value }
+error-currency-usd = Этот актив торгуется в USD, а не в { $unit }.
+error-currency-native = Этот актив торгуется в USD или { $symbol }, а не в { $unit }.
+error-duration-format = Укажи число с единицей: 15m, 24h, 2d, 5w, 3mo, 1y (также 15 min, 5 years).
+error-duration-not-positive = Длительность должна быть положительной.
+error-duration-too-short = Минимум 1 минута.
+error-duration-too-long = Максимум { $max }.
+error-note-length = От 1 до 300 символов, или - чтобы очистить заметку.
+error-alert-usage = Использование: /alert BTC 10% или /alert ETH > 70000
+error-alert-missing-parts = Не хватает запроса актива или условия алерта.
+error-alert-condition = Условие должно быть процентом, например 10%, или порогом, например > 70000, > 100k или < 0.8 ETH.
+error-no-price = Нет доступной цены.
+error-mcap-unavailable = Фактическая капитализация для этого актива недоступна.
+error-url-https = Используй HTTPS-ссылку на порту 443.
+error-url-invalid = Используй HTTPS-ссылку на порту 443, без логина/пароля и без фрагментов.
+error-url-public = Адрес вебхука должен быть публичным.
+
+## Settings
+
+settings-private-only = Открой личный чат с Price Bird, чтобы управлять настройками.
+settings-text =
+    Настройки доставки
+
+    Включай и выключай уведомления Price Bird. При выключении отменяются ожидающие отправки в Telegram. Алерты продолжают проверяться. Отдельные алерты можно поставить на паузу в /alerts.
+settings-text-connections =
+    Настройки доставки
+
+    Выбери, куда отправлять все твои алерты. Включи Price Bird, подключённое приложение или оба варианта. При выключении канала доставки отменяются его ожидающие отправки. Алерты продолжают проверяться. Отдельные алерты можно поставить на паузу в /alerts.
+settings-trenchbook-hint = <a href="{ $url }">Trenchbook</a> использует тот же аккаунт Telegram; сначала запусти его бота.
+settings-bird = Уведомления Price Bird: { $state }
+settings-language = 🌐 Язык: { $language }
+settings-connection = { $name }: { $state }
+settings-connect = Подключить { $name }
+settings-add-webhook = Добавить свой вебхук
+state-on = вкл
+state-off = выкл
+language-prompt = Выбери язык:
+invalid-connection-action = Некорректное действие с подключением.
+connection-not-found = Подключение не найдено.
+integration-not-found = Интеграция не найдена.
+admin-only-destination = Этот канал доставки доступен только админам.
+admin-only-integrations = Интеграции доступны только админам.
+admin-only-custom-webhooks = Свои вебхуки доступны только админам.
+connections-limit = Можно подключить до { $limit } приложений.
+custom-webhook-prompt =
+    Отправь название и HTTPS-адрес вебхука, например:
+    My app https://example.com/webhook
+
+    /cancel, чтобы остановить.
+custom-webhook-connected =
+    { $name } подключён. Сохрани этот секрет подписи на своей стороне:
+    { $secret }
+
+    Запросы подписываются HMAC-SHA256. Настрой приёмник, затем включи подключение в настройках.
+webhook-name-too-long = Название должно быть не длиннее 80 символов.
+webhook-name-and-url = Отправь название, а затем HTTPS-ссылку.
+new-signing-secret =
+    Новый секрет подписи. Обнови приёмник перед включением доставки:
+    { $secret }
+enable-connection-first = Сначала включи это подключение.
+delivery-already-pending = Доставка уже выполняется.
+connection-host = Хост: { $host }
+host-unavailable = недоступен
+connection-notifications = Уведомления: { $state }
+connection-last-delivery = Последняя доставка: { $status }
+button-enable = Включить
+button-disable = Выключить
+button-send-test = Тест
+button-retry-failure = Повторить попытку
+button-rotate-secret = Сменить секрет подписи
+button-disconnect = Отключить
+
+## Notifications
+
+notification-test = Проверка подключения Price Bird. Алерт не срабатывал.
+notification-rule = <b>Правило:</b> { $rule }
+notification-price = <b>Цена:</b> { $price }
+notification-floor = <b>Флор:</b> { $native } { $symbol } ({ $usd })
+notification-market-cap = <b>Капитализация:</b> { $value }
+notification-source = <b>Источник:</b> { $source }
+notification-links = <b>Ссылки:</b> { $links }
+notification-note = <b>Заметка:</b> { $note }
+rule-percent-both = Изменение { $threshold } в любую сторону
+rule-percent-up = Рост на { $threshold }
+rule-percent-down = Падение на { $threshold }
+rule-price-above = Цена выше { $threshold }
+rule-price-below = Цена ниже { $threshold }
+rule-mcap-above = Капитализация выше { $threshold }
+rule-mcap-below = Капитализация ниже { $threshold }
+rule-absolute = Изменение цены на { $threshold }
+
+## Admin
+
+admin-usage = Использование: /{ $command } 123456789
+admin-whitelisted = { $telegram_id } добавлен в вайтлист.
+admin-suspended = { $telegram_id } заблокирован.
+admin-promoted = { $telegram_id } назначен админом.
+admin-no-users = Пользователей нет.
+admin-stats =
+    Пользователи: { $users }
+    Активные алерты: { $active_alerts }
+    Отслеживаемые активы: { $watched_assets }
+admin-debug-connect-trenchbook = Сначала подключи и включи Trenchbook.
+admin-debug-no-alert = Нет предыдущего алерта для повтора.
+admin-debug-queued = Алерт #{ $alert_id } поставлен в очередь для Trenchbook.
