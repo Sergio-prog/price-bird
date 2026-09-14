@@ -58,8 +58,13 @@ docker compose --profile infra up -d --build
 
 ## Core idea
 
-Alerts are grouped by watched asset. The worker refreshes each active asset once per interval,
-stores the snapshot, evaluates all active alerts for that asset, and queues Telegram notifications.
+Alerts are grouped by watched asset. Every `PRICE_REFRESH_INTERVAL_SECONDS` the worker loads the active assets,
+groups them by provider and fetches prices in batches: one Binance ticker call covers 20 pairs and one DexScreener
+call covers 30 tokens. NFT floors refresh every `NFT_REFRESH_INTERVAL_SECONDS` instead. Each provider runs behind
+a client-side token bucket and pauses itself on 429/418 responses, so a rate limit delays that provider's alerts
+instead of banning the server IP. Budgets and the published limits are in
+[`docs/provider-rate-limits.md`](docs/provider-rate-limits.md). Each quote is stored as a snapshot, all active alerts
+for the asset are evaluated, and notifications are queued.
 
 NFT collection floors are provider-backed. OpenSea is the default (`NFT_PROVIDERS=opensea`);
 add `reservoir` only if you have a working Reservoir API.
@@ -122,7 +127,7 @@ Verify these headers before parsing the JSON:
 
 Store the event id uniquely before returning 2xx. Delivery is at least once; receivers must deduplicate. Trenchbook does this using a durable inbox and sends without an AI call. Test vectors live in `tests/test_delivery.py` and Trenchbook's `agent/lib/pricebird/receiver.test.ts`.
 
-Each destination has its own Postgres delivery record, lease and retry state. Worker restarts do not lose events. Timeouts, 408/429 and 5xx retry with backoff, up to 12 attempts within 24 hours. Other failures become terminal. Settings shows the latest delivery and permits retry of a recent failed webhook. Telegram failures remain in the `deliveries` table for operator inspection. Redis still schedules price refreshes; it no longer carries notification delivery.
+Each destination has its own Postgres delivery record, lease and retry state. Worker restarts do not lose events. Timeouts, 408/429 and 5xx retry with backoff, up to 12 attempts within 24 hours. Other failures become terminal. Settings shows the latest delivery and permits retry of a recent failed webhook. Telegram failures remain in the `deliveries` table for operator inspection. Redis holds the per-provider refresh locks and NFT refresh timers; it no longer carries notification delivery.
 
 ## Upgrading
 

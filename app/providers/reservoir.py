@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-import asyncio
+from collections.abc import Sequence
 from typing import Any
-
-import aiohttp
 
 from app.core.config import settings
 from app.db.models import Asset
-from app.providers.base import AssetCandidate, PriceQuote
+from app.providers.base import AssetCandidate, PriceQuote, sequential_prices
 from app.providers.reservoir_mapping import candidate_from_collection, chain_name, floor_price
-from app.utils.http import sleep_before_retry
+from app.utils.http import HttpClient
+from app.utils.ratelimit import ProviderThrottle
+
+REQUESTS_PER_MINUTE = 60
 
 
 class ReservoirNftProvider:
@@ -18,6 +19,10 @@ class ReservoirNftProvider:
     def __init__(self, *, base_url: str | None = None, api_key: str | None = None) -> None:
         self.base_url = (base_url or settings.reservoir_base_url).rstrip("/")
         self.api_key = api_key if api_key is not None else settings.reservoir_api_key
+        headers = {"accept": "application/json"}
+        if self.api_key:
+            headers["x-api-key"] = self.api_key
+        self.client = HttpClient(throttle=ProviderThrottle(self.name, rate_per_minute=REQUESTS_PER_MINUTE), headers=headers)
 
     async def search_assets(self, query: str, *, nft: bool = False) -> list[AssetCandidate]:
         if not nft:
@@ -64,29 +69,11 @@ class ReservoirNftProvider:
             },
         )
 
+    async def get_prices(self, assets: Sequence[Asset]) -> dict[int, PriceQuote]:
+        return await sequential_prices(self.name, assets, self.get_price)
+
+    async def close(self) -> None:
+        await self.client.close()
+
     async def _get_json(self, path: str, *, params: dict[str, str]) -> dict[str, Any]:
-        headers = {"accept": "application/json"}
-        if self.api_key:
-            headers["x-api-key"] = self.api_key
-
-        timeout = aiohttp.ClientTimeout(total=settings.provider_timeout_seconds)
-        url = f"{self.base_url}{path}"
-        last_error: Exception | None = None
-        async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
-            for attempt in range(settings.provider_max_attempts):
-                try:
-                    async with session.get(url, params=params) as response:
-                        if response.status == 429 or 500 <= response.status < 600:
-                            await sleep_before_retry(response, attempt)
-                            continue
-                        response.raise_for_status()
-                        return await response.json()
-                except (aiohttp.ClientError, TimeoutError) as exc:
-                    last_error = exc
-                    if attempt + 1 >= settings.provider_max_attempts:
-                        break
-                    await asyncio.sleep(0.5 * (2**attempt))
-
-        if last_error is not None:
-            raise last_error
-        raise RuntimeError(f"Reservoir request failed after {settings.provider_max_attempts} attempts")
+        return await self.client.get_json(f"{self.base_url}{path}", params=params)

@@ -1,14 +1,17 @@
 from __future__ import annotations
 
-import asyncio
+import logging
+from collections.abc import Awaitable, Callable, Sequence
 from decimal import Decimal
+from functools import partial
 from typing import Any
 
 import aiohttp
 
 from app.core.config import settings
 from app.db.models import Asset
-from app.providers.base import AssetCandidate, PriceQuote, ProviderConfigurationError
+from app.providers.base import AssetCandidate, PriceQuote, ProviderConfigurationError, sequential_prices
+from app.providers.cex import default_cex_provider
 from app.providers.opensea_mapping import (
     candidate_from_collection,
     collections_from_search,
@@ -16,7 +19,10 @@ from app.providers.opensea_mapping import (
     market_cap,
     slug_variants,
 )
-from app.utils.http import sleep_before_retry
+from app.utils.http import HttpClient
+from app.utils.ratelimit import ProviderThrottle
+
+logger = logging.getLogger(__name__)
 
 
 class OpenSeaNftProvider:
@@ -28,10 +34,19 @@ class OpenSeaNftProvider:
         base_url: str | None = None,
         api_key: str | None = None,
         eth_usd_symbol: str = "ETH/USDT",
+        price_source: Callable[[str], Awaitable[Decimal]] | None = None,
     ) -> None:
         self.base_url = (base_url or settings.opensea_base_url).rstrip("/")
         self.api_key = api_key if api_key is not None else settings.opensea_api_key
         self.eth_usd_symbol = eth_usd_symbol
+        self._price_source = price_source or default_cex_provider.last_price
+        headers = {"accept": "application/json"}
+        if self.api_key:
+            headers["x-api-key"] = self.api_key
+        self.client = HttpClient(
+            throttle=ProviderThrottle(self.name, rate_per_minute=settings.opensea_reads_per_hour / 60),
+            headers=headers,
+        )
 
     async def search_assets(self, query: str, *, nft: bool = False) -> list[AssetCandidate]:
         if not nft:
@@ -55,12 +70,27 @@ class OpenSeaNftProvider:
         raise configuration_error
 
     async def get_price(self, asset: Asset) -> PriceQuote:
+        return await self._quote(asset, await self._get_eth_usd())
+
+    async def get_prices(self, assets: Sequence[Asset]) -> dict[int, PriceQuote]:
+        if not assets:
+            return {}
+        try:
+            eth_usd = await self._get_eth_usd()
+        except Exception:
+            logger.exception("Skipped OpenSea batch because ETH/USD is unavailable")
+            return {}
+        return await sequential_prices(self.name, assets, partial(self._quote, eth_usd=eth_usd))
+
+    async def close(self) -> None:
+        await self.client.close()
+
+    async def _quote(self, asset: Asset, eth_usd: Decimal) -> PriceQuote:
         stats = await self._get_json(f"/api/v2/collections/{asset.provider_asset_id}/stats", params={})
         floor_native = floor_price(stats or {})
         if floor_native is None:
             raise LookupError(f"No OpenSea floor price found for {asset.symbol}")
 
-        eth_usd = await self._get_eth_usd()
         market_cap_native = market_cap(stats or {})
         return PriceQuote(
             price_usd=floor_native * eth_usd,
@@ -111,46 +141,12 @@ class OpenSeaNftProvider:
         return candidates
 
     async def _get_json(self, path: str, *, params: dict[str, str], missing_ok: bool = False) -> dict[str, Any] | None:
-        headers = {"accept": "application/json"}
-        if self.api_key:
-            headers["x-api-key"] = self.api_key
-        timeout = aiohttp.ClientTimeout(total=settings.provider_timeout_seconds)
-        url = f"{self.base_url}{path}"
-        last_error: Exception | None = None
-        async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
-            for attempt in range(settings.provider_max_attempts):
-                try:
-                    async with session.get(url, params=params) as response:
-                        if response.status == 429 or 500 <= response.status < 600:
-                            await sleep_before_retry(response, attempt)
-                            continue
-                        if response.status in {401, 403}:
-                            raise ProviderConfigurationError(
-                                f"OpenSea rejected the API key ({response.status}); renew OPENSEA_API_KEY"
-                            )
-                        if missing_ok and response.status in {400, 404}:
-                            return None
-                        response.raise_for_status()
-                        return await response.json()
-                except (aiohttp.ClientError, TimeoutError) as exc:
-                    last_error = exc
-                    if attempt + 1 >= settings.provider_max_attempts:
-                        break
-                    await asyncio.sleep(0.5 * (2**attempt))
-
-        if last_error is not None:
-            raise last_error
-        raise RuntimeError(f"OpenSea request failed after {settings.provider_max_attempts} attempts")
+        try:
+            return await self.client.get_json(f"{self.base_url}{path}", params=params, missing_ok=missing_ok)
+        except aiohttp.ClientResponseError as exc:
+            if exc.status in {401, 403}:
+                raise ProviderConfigurationError(f"OpenSea rejected the API key ({exc.status}); renew OPENSEA_API_KEY") from exc
+            raise
 
     async def _get_eth_usd(self) -> Decimal:
-        import ccxt.async_support as ccxt
-
-        exchange = ccxt.binance()
-        try:
-            ticker = await exchange.fetch_ticker(self.eth_usd_symbol)
-        finally:
-            await exchange.close()
-        price = ticker.get("last") or ticker.get("close")
-        if price is None:
-            raise LookupError(f"No CEX price for {self.eth_usd_symbol}")
-        return Decimal(str(price))
+        return await self._price_source(self.eth_usd_symbol)

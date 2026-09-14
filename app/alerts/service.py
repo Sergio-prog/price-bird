@@ -12,6 +12,7 @@ from app.db import repositories as repo
 from app.db.enums import AlertType, AssetType
 from app.db.models import Alert, Asset
 from app.delivery.events import queue_event
+from app.providers.base import PriceQuote
 from app.providers.registry import provider_registry
 from app.utils.amounts import resolve_currency
 from app.utils.currency import canonical_symbol
@@ -74,6 +75,10 @@ def threshold_currency_for(parsed: ParsedAlertCommand, asset: Asset, quote) -> s
 
 async def refresh_and_evaluate_asset(session: AsyncSession, asset: Asset) -> list[int]:
     quote = await provider_registry.get_price(asset)
+    return await evaluate_asset_quote(session, asset, quote)
+
+
+async def evaluate_asset_quote(session: AsyncSession, asset: Asset, quote: PriceQuote) -> list[int]:
     if not quote.price_usd.is_finite() or quote.price_usd <= 0:
         raise ValueError("No valid price available")
     snapshot = await repo.create_snapshot(

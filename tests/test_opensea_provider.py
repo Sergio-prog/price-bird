@@ -104,3 +104,32 @@ async def test_get_price_converts_native_floor_to_usd(monkeypatch: pytest.Monkey
 def test_slug_variants_cover_hyphenated_and_joined_forms() -> None:
     assert slug_variants("Pudgy Penguins") == ["pudgy-penguins", "pudgypenguins"]
     assert slug_variants("milady") == ["milady"]
+
+
+@pytest.mark.asyncio
+async def test_get_prices_fetches_eth_usd_once_and_skips_failures(monkeypatch: pytest.MonkeyPatch) -> None:
+    provider = OpenSeaNftProvider(base_url="https://example.test", api_key="key")
+    eth_calls = 0
+
+    async def fake_get_json(path: str, *, params: dict[str, str], missing_ok: bool = False) -> dict:
+        if "broken" in path:
+            raise RuntimeError("boom")
+        return {"total": {"floor_price": 2}}
+
+    async def fake_get_eth_usd() -> Decimal:
+        nonlocal eth_calls
+        eth_calls += 1
+        return Decimal("1000")
+
+    monkeypatch.setattr(provider, "_get_json", fake_get_json)
+    monkeypatch.setattr(provider, "_get_eth_usd", fake_get_eth_usd)
+    assets = [
+        SimpleNamespace(id=1, provider_asset_id="milady", symbol="MILADY"),
+        SimpleNamespace(id=2, provider_asset_id="broken", symbol="BROKEN"),
+    ]
+
+    quotes = await provider.get_prices(assets)
+
+    assert eth_calls == 1
+    assert list(quotes) == [1]
+    assert quotes[1].price_usd == Decimal("2000")

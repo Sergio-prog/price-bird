@@ -12,6 +12,7 @@ from app.bot.handlers import setup_handlers
 from app.bot.middlewares import DbSessionMiddleware
 from app.core.config import settings
 from app.db.session import SessionLocal
+from app.providers.registry import provider_registry
 
 logger = logging.getLogger(__name__)
 
@@ -66,10 +67,13 @@ async def async_main() -> None:
     logging.basicConfig(level=logging.INFO)
     if not settings.bot_token:
         raise RuntimeError("BOT_TOKEN is required")
-    if settings.bot_mode == "webhook":
-        await run_webhook()
-    else:
-        await run_polling()
+    try:
+        if settings.bot_mode == "webhook":
+            await run_webhook()
+        else:
+            await run_polling()
+    finally:
+        await provider_registry.close()
 
 
 def main() -> None:
