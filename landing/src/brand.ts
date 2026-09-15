@@ -1,9 +1,8 @@
-type Quote = { price: number; unit: string; market: string; source: string; sourceUrl: string; chart?: string; mcap?: string };
+type Quote = { price: number; unit: string; source: string; sourceUrl: string; chart?: string; mcap?: string };
 
 const binance = (pair: string, mcap: string): Quote => ({
   price: 0,
   unit: "$",
-  market: `Binance ${pair}/USDT`,
   source: "Binance",
   sourceUrl: `https://www.binance.com/en/trade/${pair}_USDT`,
   chart: `https://www.tradingview.com/symbols/${pair}USDT/`,
@@ -13,7 +12,6 @@ const binance = (pair: string, mcap: string): Quote => ({
 const opensea = (slug: string, price: number): Quote => ({
   price,
   unit: "ETH",
-  market: `OpenSea ${slug}`,
   source: "OpenSea",
   sourceUrl: `https://opensea.io/collection/${slug}`,
 });
@@ -27,7 +25,6 @@ const quotes: Record<string, Quote> = {
   PEPE: {
     price: 0.0000112,
     unit: "$",
-    market: "DexScreener PEPE/WETH",
     source: "DexScreener",
     sourceUrl: "https://dexscreener.com/ethereum/0xa43fe16908251ee8ef3a74c7e9eb5c9fd8a3aa0e",
     chart: "https://www.tradingview.com/symbols/PEPEUSD/",
@@ -65,7 +62,7 @@ function percent(from: number, to: number) {
   return `${arrow} ${sign}${change.toFixed(1)}%`;
 }
 
-type Parsed = { created: string; firedTitle: string; firedHtml: string };
+type Parsed = { firedTitle: string; firedHtml: string };
 
 function parse(input: string): Parsed | null {
   const match = rule.exec(input.trim());
@@ -77,7 +74,6 @@ function parse(input: string): Parsed | null {
   const isNft = Boolean(floor) || quote?.unit === "ETH";
   const symbol = isNft ? name.toLowerCase() : key;
   const unit = dollar ? "$" : rawUnit ? rawUnit.toUpperCase() : quote?.unit ?? (isNft ? "ETH" : "$");
-  const market = quote?.market ?? (isNft ? `OpenSea ${symbol}` : `DexScreener ${symbol}`);
   const source = quote?.source ?? (isNft ? "OpenSea" : "DexScreener");
   const sourceUrl =
     quote?.sourceUrl ??
@@ -87,39 +83,33 @@ function parse(input: string): Parsed | null {
   const chart = quote?.chart ?? (isNft ? null : `https://www.tradingview.com/symbols/${encodeURIComponent(symbol)}USD/`);
   const subject = isNft ? "Floor" : "Price";
 
-  let condition: string;
   let ruleLine: string;
   let firedPrice: number | null;
   let change: string;
 
   if (pct) {
     const p = Number(pct);
-    condition = `Moves ${p}% up or down`;
     ruleLine = `${p}% move up or down`;
     firedPrice = quote ? quote.price * (1 + (p + 0.3) / 100) : null;
     change = `↑ +${(p + 0.3).toFixed(1)}%`;
   } else {
     const threshold = Number(num) * (multipliers[(suffix ?? "").toLowerCase()] ?? 1);
     const above = op === ">";
-    condition = `${subject} goes ${above ? "above" : "below"} ${money(threshold, unit)}`;
     ruleLine = `${subject} ${above ? "above" : "below"} ${money(threshold, unit)}`;
     firedPrice = threshold * (above ? 1.004 : 0.996);
     change = quote && quote.unit === unit ? percent(quote.price, firedPrice) : above ? "↑" : "↓";
   }
 
-  const baseline = quote ? money(quote.price, quote.unit) : "live price at creation";
-  const created = `✅ ${symbol} is now on your watchlist.\n\nTrigger: ${condition}\nBaseline: ${baseline}\nMarket: ${market}\nMode: repeat`;
   const priceLine = firedPrice === null ? "" : `\n${isNft ? "Floor price" : "Price"}: ${money(firedPrice, unit)}`;
   const mcapLine = quote?.mcap && !isNft ? `\nMarket cap: ${quote.mcap}` : "";
   const chartLine = chart ? `\nLinks: ${link("TradingView", chart)}` : "";
   const firedHtml = `Rule: ${escape(ruleLine)}${escape(priceLine)}${escape(mcapLine)}\n\nSource: ${link(escape(source), sourceUrl)}${chartLine}`;
-  return { created, firedTitle: `🔔 ${symbol} ${change}`, firedHtml };
+  return { firedTitle: `🔔 ${symbol} ${change}`, firedHtml };
 }
 
 const input = document.querySelector<HTMLInputElement>("#rule")!;
 const typed = document.querySelector<HTMLElement>("#typed")!;
 const result = document.querySelector<HTMLElement>("#result")!;
-const created = document.querySelector<HTMLElement>("#created")!;
 const firedTitle = document.querySelector<HTMLElement>("#fired-title")!;
 const fired = document.querySelector<HTMLElement>("#fired")!;
 
@@ -127,13 +117,13 @@ const errorText = "Couldn't read that rule. Try BTC 10%, ETH > 4000 or milady fl
 
 function render(value: string) {
   const parsed = parse(value);
+  firedTitle.classList.toggle("text-lime", Boolean(parsed));
+  firedTitle.classList.toggle("text-haze", !parsed);
   if (!parsed) {
-    created.textContent = value.trim() === "" ? "Type a rule above." : errorText;
-    firedTitle.textContent = "";
+    firedTitle.textContent = value.trim() === "" ? "Type a rule above." : errorText;
     fired.textContent = "";
     return;
   }
-  created.textContent = parsed.created;
   firedTitle.textContent = parsed.firedTitle;
   fired.innerHTML = parsed.firedHtml;
 }
