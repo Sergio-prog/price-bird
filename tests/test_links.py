@@ -18,10 +18,34 @@ def test_link_builder_adds_safe_defaults() -> None:
 
     assert "dexscreener" in links
     assert "tradingview" in links
-    assert "axiom" in links
+    assert links["gmgn"] == "https://gmgn.ai/eth/token/0xabc"
+    assert links["fomo"] == "https://fomo.family/tokens/ethereum/0xabc"
+    assert links["coinmarketcap"] == "https://coinmarketcap.com/search/?q=0xabc"
 
 
 def test_format_links_uses_html_magic_links() -> None:
     links = format_links({"dexscreener": "https://dexscreener.com/ethereum/0xabc"})
 
     assert links == '<a href="https://dexscreener.com/ethereum/0xabc">DexScreener</a>'
+
+
+def test_link_builder_omits_chain_specific_links_when_unsupported() -> None:
+    asset = Asset()
+    asset.chain = "unsupported"
+
+    links = build_asset_links(asset)
+
+    assert "gmgn" not in links
+    assert "fomo" not in links
+    assert "dexscreener" in links
+    assert "coinmarketcap" in links
+
+
+def test_fomo_robinhood_deep_link() -> None:
+    asset = Asset()
+    asset.chain = "robinhood"
+    asset.contract_address = "0x395c45c2e5170ab9d020010dc13214ab73051e18"
+
+    links = build_asset_links(asset)
+
+    assert links["fomo"] == ("https://fomo.family/tokens/robinhood/0x395c45c2e5170ab9d020010dc13214ab73051e18")

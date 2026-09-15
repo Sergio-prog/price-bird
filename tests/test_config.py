@@ -22,3 +22,10 @@ def test_webhook_mode_accepts_production_configuration() -> None:
     )
 
     assert configured.bot_mode == "webhook"
+
+
+def test_private_destinations_default_to_disabled() -> None:
+    configured = Settings(_env_file=None)
+
+    assert configured.public_integrations_enabled is False
+    assert configured.public_custom_webhooks_enabled is False

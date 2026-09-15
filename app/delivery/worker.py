@@ -30,6 +30,7 @@ from app.delivery.legacy import route_legacy_events
 from app.delivery.webhook import DeliveryError, send_webhook
 from app.i18n import resolve_locale, t, use_locale
 from app.integrations.access import can_use_connection
+from app.preferences import in_quiet_hours, quiet_hours, timezone_offset_minutes
 
 logger = logging.getLogger(__name__)
 
@@ -183,7 +184,17 @@ async def process_delivery(delivery: Delivery, bot: Bot) -> None:
             else:
                 with use_locale(resolve_locale(user.language, user.language_code)):
                     text = render_payload(delivery.payload)
-                await bot.send_message(user.telegram_id, text, parse_mode="HTML", request_timeout=10)
+                await bot.send_message(
+                    user.telegram_id,
+                    text,
+                    parse_mode="HTML",
+                    disable_notification=in_quiet_hours(
+                        datetime.now(UTC),
+                        quiet_hours(user),
+                        timezone_offset_minutes(user),
+                    ),
+                    request_timeout=10,
+                )
     except TelegramRetryAfter as exc:
         status, error, delay = "pending", "Telegram rate limit", exc.retry_after
     except (TelegramForbiddenError, TelegramBadRequest):

@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from app.bot.handlers.settings import TRENCHBOOK_BOT_URL, settings_view
+from app.bot.handlers.settings import TRENCHBOOK_BOT_URL, coin_link_view, quiet_hours_view, settings_view, timezone_view
 from app.core.config import settings
 from app.db.models import ConnectedApp, IntegrationDefinition
 from app.integrations.access import can_use_connection, can_use_custom_webhooks, can_use_integrations
@@ -95,6 +95,9 @@ async def test_public_settings_hide_private_destinations(monkeypatch):
     assert "Trenchbook" not in text
     assert [button.text for row in markup.inline_keyboard for button in row] == [
         "Price Bird notifications: on",
+        "Timezone: UTC+00:00",
+        "Quiet hours: off",
+        "Coin link: DexScreener",
         "🌐 Language: English",
         "↩️ Back",
     ]
@@ -117,6 +120,106 @@ def test_private_destinations_are_admin_only_by_default(monkeypatch):
     assert not can_use_custom_webhooks(user)
     assert not can_use_connection(user, integration)
     assert not can_use_connection(user, webhook)
+
+
+def test_notification_preference_views() -> None:
+    user = SimpleNamespace(
+        quiet_hours_start=23,
+        quiet_hours_end=8,
+        timezone_offset_minutes=120,
+        coin_link="gmgn",
+    )
+
+    quiet_text, quiet_markup = quiet_hours_view(user)
+    timezone_text, timezone_markup = timezone_view(user)
+    link_text, link_markup = coin_link_view(user)
+
+    assert "23:00-08:00 (UTC+02:00)" in quiet_text
+    assert [button.text for button in quiet_markup.inline_keyboard[0]] == ["-1h", "from 23:00", "+1h"]
+    assert timezone_text.startswith("Timezone: UTC+02:00")
+    assert [button.text for button in timezone_markup.inline_keyboard[0]] == ["-1h", "UTC+02:00", "+1h"]
+    assert link_text.startswith("Coin link: GMGN")
+    assert "• GMGN" in [button.text for row in link_markup.inline_keyboard for button in row]
+
+
+@pytest.mark.asyncio
+async def test_coin_link_callback_updates_user_and_edits_message(monkeypatch) -> None:
+    from app.bot.handlers import settings as settings_handler
+
+    class FakeMessage:
+        chat = SimpleNamespace(type="private")
+
+        def __init__(self):
+            self.edits = []
+
+        async def edit_text(self, text, **kwargs):
+            self.edits.append((text, kwargs))
+
+    user = SimpleNamespace(
+        id=1,
+        bird_enabled=True,
+        role="user",
+        access_status="active",
+        coin_link="dexscreener",
+        quiet_hours_start=None,
+        quiet_hours_end=None,
+        timezone_offset_minutes=0,
+    )
+    message = FakeMessage()
+    callback = SimpleNamespace(
+        data="settings:coinlink:gmgn",
+        from_user=SimpleNamespace(id=42),
+        message=message,
+        answer=AsyncMock(),
+    )
+    session = SimpleNamespace(refresh=AsyncMock(), commit=AsyncMock())
+    state = SimpleNamespace(clear=AsyncMock())
+    monkeypatch.setattr(settings_handler, "Message", FakeMessage)
+    monkeypatch.setattr(settings_handler, "owned_user", AsyncMock(return_value=user))
+
+    await settings_handler.settings_callback(callback, state, session)
+
+    assert user.coin_link == "gmgn"
+    assert message.edits[0][0].startswith("Coin link: GMGN")
+    session.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_timezone_callback_updates_user_and_edits_message(monkeypatch) -> None:
+    from app.bot.handlers import settings as settings_handler
+
+    class FakeMessage:
+        chat = SimpleNamespace(type="private")
+
+        def __init__(self):
+            self.edits = []
+
+        async def edit_text(self, text, **kwargs):
+            self.edits.append((text, kwargs))
+
+    user = SimpleNamespace(
+        id=1,
+        role="user",
+        access_status="active",
+        timezone_offset_minutes=120,
+    )
+    message = FakeMessage()
+    callback = SimpleNamespace(
+        data="settings:timezone:60",
+        from_user=SimpleNamespace(id=42),
+        message=message,
+        answer=AsyncMock(),
+    )
+    session = SimpleNamespace(refresh=AsyncMock(), commit=AsyncMock())
+    state = SimpleNamespace(clear=AsyncMock())
+    monkeypatch.setattr(settings_handler, "Message", FakeMessage)
+    monkeypatch.setattr(settings_handler, "owned_user", AsyncMock(return_value=user))
+
+    await settings_handler.settings_callback(callback, state, session)
+
+    assert user.timezone_offset_minutes == 180
+    assert message.edits[0][0].startswith("Timezone: UTC+03:00")
+    session.commit.assert_awaited_once()
 
 
 @pytest.mark.asyncio

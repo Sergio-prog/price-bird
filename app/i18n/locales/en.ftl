@@ -261,13 +261,18 @@ settings-private-only = Open a private chat with Price Bird to manage settings.
 settings-text =
     Delivery settings
 
-    Turn Price Bird notifications on or off. Turning them off cancels pending Telegram deliveries. Alerts keep evaluating. Pause individual alerts from /alerts.
+    Turn Price Bird notifications on or off. Set your timezone, then choose quiet hours for silent alerts. Choose the coin link included in token alerts. Turning notifications off cancels pending Telegram deliveries. Alerts keep evaluating. Pause individual alerts from /alerts.
 settings-text-connections =
     Delivery settings
 
-    Choose where all your alerts are sent. Turn on Price Bird, a connected app, or both. Turning off a destination cancels its pending deliveries. Alerts keep evaluating. Pause individual alerts from /alerts.
+    Turn Price Bird notifications on or off. Set your timezone, then choose quiet hours for silent alerts. Choose the coin link included in token alerts. Alerts keep evaluating. Pause individual alerts from /alerts.
+
+    Choose where alerts are sent. Turn on Price Bird, a connected app, or both. Turning off a destination cancels its pending deliveries.
 settings-trenchbook-hint = <a href="{ $url }">Trenchbook</a> uses your same Telegram account; start its bot first.
 settings-bird = Price Bird notifications: { $state }
+settings-timezone = Timezone: { $timezone }
+settings-quiet-hours = Quiet hours: { $value }
+settings-coin-link = Coin link: { $provider }
 settings-language = 🌐 Language: { $language }
 settings-connection = { $name }: { $state }
 settings-connect = Connect { $name }
@@ -275,6 +280,22 @@ settings-add-webhook = Add custom webhook
 state-on = on
 state-off = off
 language-prompt = Choose your language:
+quiet-hours-text =
+    Quiet hours: { $value }
+    Price Bird alerts still arrive, but without sound.
+quiet-from = from { $time }
+quiet-to = to { $time }
+quiet-turn-off = Turn off
+quiet-turn-on = Turn on 22:00-07:00
+timezone-text =
+    Timezone: { $timezone }
+    Quiet hours use this local time. Fixed UTC offsets do not change for daylight saving time.
+coin-link-text =
+    Coin link: { $provider }
+    This link is included in token alerts when the provider supports the asset.
+invalid-timezone-setting = Invalid timezone setting.
+invalid-quiet-hours-setting = Invalid quiet-hours setting.
+invalid-coin-link = Invalid coin link.
 invalid-connection-action = Invalid connection action.
 connection-not-found = Connection not found.
 integration-not-found = Integration not found.

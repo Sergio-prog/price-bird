@@ -13,8 +13,8 @@ from app.db import repositories as repo
 from app.db.enums import AlertType, AssetType
 from app.db.models import Alert, Asset
 from app.delivery.events import queue_event
-from app.providers.base import PriceQuote
 from app.i18n import LocalizedError, t
+from app.providers.base import PriceQuote
 from app.providers.registry import provider_registry
 from app.utils.amounts import resolve_currency
 from app.utils.currency import canonical_symbol

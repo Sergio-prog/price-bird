@@ -11,10 +11,18 @@ from app.alerts.links import build_asset_links
 from app.db.models import Alert, AlertEvent, Asset, ConnectedApp, Delivery
 from app.integrations.access import can_use_connection
 from app.integrations.catalog import TRENCHBOOK_SLUG
+from app.preferences import coin_link_key
 
 
 async def queue_event(session: AsyncSession, event: AlertEvent, alert: Alert, asset: Asset, quote) -> None:
     event.notification_status = "routed"
+    available_links = build_asset_links(asset)
+    preferred_link = coin_link_key(getattr(alert.user, "coin_link", None))
+    selected_links = {}
+    for name in (quote.source, preferred_link):
+        url = available_links.get(name)
+        if url and len(url) <= 400 and urlsplit(url).scheme == "https":
+            selected_links[name] = url
     payload = {
         "schema_version": 1,
         "type": "alert.triggered",
@@ -22,11 +30,7 @@ async def queue_event(session: AsyncSession, event: AlertEvent, alert: Alert, as
         "occurred_at": (event.created_at or datetime.now(UTC)).isoformat(),
         "alert_id": str(alert.id),
         "note": alert.note,
-        "links": {
-            name: url
-            for name, url in list(build_asset_links(asset).items())[:2]
-            if len(url) <= 400 and urlsplit(url).scheme == "https"
-        },
+        "links": selected_links,
         "recipient_telegram_id": str(alert.user.telegram_id),
         "asset": {"symbol": asset.symbol, "kind": asset.type, "chain": asset.chain, "address": asset.contract_address},
         "rule": {

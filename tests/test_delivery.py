@@ -70,6 +70,38 @@ async def test_independent_destinations(bird, apps, expected):
 
 
 @pytest.mark.asyncio
+async def test_user_coin_link_is_included_with_source() -> None:
+    rows = []
+    session = SimpleNamespace(add=rows.append, scalars=AsyncMock(return_value=[]))
+    user = User(
+        id=1,
+        telegram_id=42,
+        bird_enabled=True,
+        role="admin",
+        access_status="active",
+        coin_link="gmgn",
+    )
+    alert = Alert(
+        id=2,
+        user_id=1,
+        user=user,
+        type="price_above",
+        threshold_value=Decimal("2"),
+        baseline_price=Decimal("1"),
+        direction="up",
+    )
+    asset = Asset(symbol="TOKEN", type="token", chain="solana", contract_address="token")
+    event = SimpleNamespace(id=3, created_at=datetime.now(UTC), direction="up", percent_change=Decimal("100"))
+
+    await queue_event(session, event, alert, asset, PriceQuote(Decimal("2"), "dexscreener", {}))
+
+    assert rows[0].payload["links"] == {
+        "dexscreener": "https://dexscreener.com/solana/token",
+        "gmgn": "https://gmgn.ai/sol/token/token",
+    }
+
+
+@pytest.mark.asyncio
 async def test_repeating_move_alert_rebases_and_respects_cooldown(monkeypatch):
     alert = Alert(
         id=1,
@@ -132,6 +164,52 @@ async def test_disabled_destination_is_cancelled_before_send(monkeypatch):
     await worker.process_delivery(delivery, bot)
     bot.send_message.assert_not_awaited()
     assert statements[0].compile().params["status"] == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_quiet_hours_send_telegram_alert_without_sound(monkeypatch):
+    from app.delivery import worker
+
+    statements = []
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        def begin(self):
+            return self
+
+        async def get(self, model, key):
+            return User(
+                access_status="active",
+                bird_enabled=True,
+                telegram_id=42,
+                quiet_hours_start=2,
+                quiet_hours_end=23,
+                timezone_offset_minutes=120,
+            )
+
+        async def execute(self, statement):
+            statements.append(statement)
+
+    monkeypatch.setattr(worker, "SessionLocal", Session)
+    bot = SimpleNamespace(send_message=AsyncMock())
+    delivery = SimpleNamespace(
+        id="delivery",
+        user_id=1,
+        connection_id=None,
+        destination="bird",
+        lease_token="lease",
+        payload={"type": "connection.test"},
+    )
+
+    await worker.process_delivery(delivery, bot)
+
+    assert bot.send_message.await_args.kwargs["disable_notification"] is True
+    assert statements[0].compile().params["status"] == "sent"
 
 
 @pytest.mark.asyncio

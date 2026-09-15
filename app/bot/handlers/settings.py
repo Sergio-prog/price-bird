@@ -25,6 +25,16 @@ from app.integrations.access import can_use_connection, can_use_custom_webhooks,
 from app.integrations.secrets import decrypt_secret, ensure_encryption_configured
 from app.integrations.service import connection_secret, connection_url, create_custom_connection, rotate_custom_secret
 from app.integrations.urls import validate_url
+from app.preferences import (
+    COIN_LINKS,
+    DEFAULT_QUIET_HOURS,
+    coin_link_key,
+    format_timezone,
+    quiet_hours,
+    shift_hour,
+    shift_timezone_offset,
+    timezone_offset_minutes,
+)
 
 router = Router(name="settings")
 TRENCHBOOK_BOT_URL = "https://t.me/trenches_fotex_bot"
@@ -73,8 +83,18 @@ async def settings_view(session, user):
                 .order_by(IntegrationDefinition.name)
             )
         )
+    quiet = quiet_hours(user)
+    offset = timezone_offset_minutes(user)
     rows = [
         [(t("settings-bird", state=_state_label(user.bird_enabled)), "settings:bird")],
+        [(t("settings-timezone", timezone=format_timezone(offset)), "settings:timezone")],
+        [(t("settings-quiet-hours", value=_quiet_label(quiet, offset)), "settings:quiet")],
+        [
+            (
+                t("settings-coin-link", provider=COIN_LINKS[coin_link_key(getattr(user, "coin_link", None))]),
+                "settings:coinlink",
+            )
+        ],
         [(t("settings-language", language=LOCALE_NAMES[current_locale()]), "settings:language")],
     ]
     rows += [
@@ -105,6 +125,51 @@ def language_view() -> tuple[str, Markup]:
     ]
     rows.append([(t("button-back"), "settings:open")])
     return t("language-prompt"), keyboard(rows)
+
+
+def _clock(hour: int) -> str:
+    return f"{hour:02}:00"
+
+
+def _quiet_label(hours: tuple[int, int] | None, offset_minutes: int) -> str:
+    return f"{_clock(hours[0])}-{_clock(hours[1])} ({format_timezone(offset_minutes)})" if hours else t("state-off")
+
+
+def quiet_hours_view(user):
+    hours = quiet_hours(user)
+    offset = timezone_offset_minutes(user)
+    shown = hours or DEFAULT_QUIET_HOURS
+    rows = [
+        [
+            ("-1h", "settings:quiet:start:-1"),
+            (t("quiet-from", time=_clock(shown[0])), "settings:quiet"),
+            ("+1h", "settings:quiet:start:1"),
+        ],
+        [
+            ("-1h", "settings:quiet:end:-1"),
+            (t("quiet-to", time=_clock(shown[1])), "settings:quiet"),
+            ("+1h", "settings:quiet:end:1"),
+        ],
+        [(t("quiet-turn-off") if hours else t("quiet-turn-on"), "settings:quiet:toggle")],
+        [(t("button-back"), "settings:open")],
+    ]
+    return t("quiet-hours-text", value=_quiet_label(hours, offset)), keyboard(rows)
+
+
+def timezone_view(user):
+    offset = timezone_offset_minutes(user)
+    rows = [
+        [("-1h", "settings:timezone:-60"), (format_timezone(offset), "settings:timezone"), ("+1h", "settings:timezone:60")],
+        [(t("button-back"), "settings:open")],
+    ]
+    return t("timezone-text", timezone=format_timezone(offset)), keyboard(rows)
+
+
+def coin_link_view(user):
+    selected = coin_link_key(getattr(user, "coin_link", None))
+    rows = [[(f"{'• ' if key == selected else ''}{label}", f"settings:coinlink:{key}")] for key, label in COIN_LINKS.items()]
+    rows.append([(t("button-back"), "settings:open")])
+    return t("coin-link-text", provider=COIN_LINKS[selected]), keyboard(rows)
 
 
 @router.message(Command("settings"))
@@ -158,6 +223,57 @@ async def settings_callback(callback: CallbackQuery, state: FSMContext, session:
     await state.clear()
     if action == "language":
         await _language_callback(callback, session, user, parts)
+        return
+    if action == "timezone":
+        await session.refresh(user, with_for_update=True)
+        if len(parts) == 3 and parts[2] in {"-60", "60"}:
+            user.timezone_offset_minutes = shift_timezone_offset(
+                timezone_offset_minutes(user),
+                int(parts[2]),
+            )
+        elif len(parts) != 2:
+            await callback.answer(t("invalid-timezone-setting"))
+            return
+        await session.commit()
+        text, markup = timezone_view(user)
+        await _edit(callback.message, text, markup)
+        await callback.answer()
+        return
+    if action == "quiet":
+        await session.refresh(user, with_for_update=True)
+        if len(parts) == 3 and parts[2] == "toggle":
+            if quiet_hours(user):
+                user.quiet_hours_start = None
+                user.quiet_hours_end = None
+            else:
+                user.quiet_hours_start, user.quiet_hours_end = DEFAULT_QUIET_HOURS
+        elif len(parts) == 4 and parts[2] in {"start", "end"} and parts[3] in {"-1", "1"}:
+            current = quiet_hours(user) or DEFAULT_QUIET_HOURS
+            start, end = current
+            if parts[2] == "start":
+                start = shift_hour(start, int(parts[3]))
+            else:
+                end = shift_hour(end, int(parts[3]))
+            user.quiet_hours_start, user.quiet_hours_end = start, end
+        elif len(parts) != 2:
+            await callback.answer(t("invalid-quiet-hours-setting"))
+            return
+        await session.commit()
+        text, markup = quiet_hours_view(user)
+        await _edit(callback.message, text, markup)
+        await callback.answer()
+        return
+    if action == "coinlink":
+        await session.refresh(user, with_for_update=True)
+        if len(parts) == 3 and parts[2] in COIN_LINKS:
+            user.coin_link = parts[2]
+        elif len(parts) != 2:
+            await callback.answer(t("invalid-coin-link"))
+            return
+        await session.commit()
+        text, markup = coin_link_view(user)
+        await _edit(callback.message, text, markup)
+        await callback.answer()
         return
     connection = None
     connection_actions = {"view", "toggle", "disconnect", "rotate", "test", "retry"}

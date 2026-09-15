@@ -37,10 +37,32 @@ class TimestampMixin:
 
 class User(Base, TimestampMixin):
     __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint(
+            "quiet_hours_start IS NULL OR quiet_hours_start BETWEEN 0 AND 23",
+            name="ck_users_quiet_hours_start",
+        ),
+        CheckConstraint(
+            "quiet_hours_end IS NULL OR quiet_hours_end BETWEEN 0 AND 23",
+            name="ck_users_quiet_hours_end",
+        ),
+        CheckConstraint(
+            "timezone_offset_minutes BETWEEN -720 AND 840",
+            name="ck_users_timezone_offset_minutes",
+        ),
+        CheckConstraint(
+            "coin_link IN ('tradingview', 'dexscreener', 'gmgn', 'fomo', 'coinmarketcap')",
+            name="ck_users_coin_link",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
     bird_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    quiet_hours_start: Mapped[int | None] = mapped_column()
+    quiet_hours_end: Mapped[int | None] = mapped_column()
+    timezone_offset_minutes: Mapped[int] = mapped_column(default=0, server_default="0")
+    coin_link: Mapped[str] = mapped_column(String(32), default="dexscreener", server_default="dexscreener")
     username: Mapped[str | None] = mapped_column(String(255))
     first_name: Mapped[str | None] = mapped_column(String(255))
     last_name: Mapped[str | None] = mapped_column(String(255))

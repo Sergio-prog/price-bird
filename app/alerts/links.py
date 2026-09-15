@@ -5,6 +5,16 @@ from urllib.parse import quote_plus
 
 from app.db.models import Asset
 
+GMGN_CHAINS = {
+    "arbitrum": "arb",
+    "base": "base",
+    "bsc": "bsc",
+    "ethereum": "eth",
+    "robinhood": "robinhood",
+    "solana": "sol",
+}
+FOMO_CHAINS = {"base", "bsc", "ethereum", "monad", "robinhood", "solana"}
+
 
 def build_asset_links(asset: Asset) -> dict[str, str]:
     links = {link.kind: link.url for link in asset.links}
@@ -14,10 +24,14 @@ def build_asset_links(asset: Asset) -> dict[str, str]:
 
     if asset.contract_address and asset.chain:
         chain = asset.chain.lower()
+        address = asset.contract_address
         if "dexscreener" not in links:
-            links["dexscreener"] = f"https://dexscreener.com/{chain}/{asset.contract_address}"
-        if "axiom" not in links and chain in {"ethereum", "solana", "bsc", "base", "arbitrum", "unichain"}:
-            links["axiom"] = f"https://axiom.trade/t/{asset.contract_address}"
+            links["dexscreener"] = f"https://dexscreener.com/{chain}/{address}"
+        if gmgn_chain := GMGN_CHAINS.get(chain):
+            links.setdefault("gmgn", f"https://gmgn.ai/{gmgn_chain}/token/{address}")
+        if chain in FOMO_CHAINS:
+            links.setdefault("fomo", f"https://fomo.family/tokens/{chain}/{address}")
+        links.setdefault("coinmarketcap", f"https://coinmarketcap.com/search/?q={quote_plus(address)}")
 
     return links
 
@@ -30,8 +44,10 @@ def format_links(links: dict[str, str]) -> str:
 
 def _link_label(label: str) -> str:
     labels = {
-        "axiom": "Axiom",
+        "coinmarketcap": "CoinMarketCap",
         "dexscreener": "DexScreener",
+        "fomo": "Fomo Trade",
+        "gmgn": "GMGN",
         "opensea": "OpenSea",
         "reservoir": "Reservoir",
         "tradingview": "TradingView",
