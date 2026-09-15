@@ -1,0 +1,9 @@
+{
+  "rewrites": [
+    {
+      "source": "/",
+      "has": [{ "type": "query", "key": "brand", "value": "true" }],
+      "destination": "/brand/index.html"
+    }
+  ]
+}

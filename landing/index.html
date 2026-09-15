@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Price Bird</title>
+    <meta name="description" content="Open-source Telegram bot for token, CEX pair, market cap and NFT floor alerts. One line per rule." />
+    <link rel="icon" href="/logo.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/minimal.css" />
+  </head>
+  <body class="bg-black font-sans text-ink antialiased">
+    <main class="mx-auto max-w-[40rem] px-6 pt-10 pb-24 md:pt-16">
+      <header class="flex items-center justify-between">
+        <a href="/" class="flex items-center gap-2.5 font-medium">
+          <img src="/logo.png" width="26" height="26" alt="" class="rounded-md" />
+          Price Bird
+        </a>
+        <nav class="flex gap-5 text-sm text-mute">
+          <a href="#self-host" class="hover:text-ink">Self-host</a>
+          <a href="https://github.com/Sergio-prog/price-bird" class="hover:text-ink">GitHub</a>
+        </nav>
+      </header>
+
+      <section class="mt-24">
+        <h1 class="text-[2rem] leading-[1.15] font-medium tracking-[-0.02em] md:text-[2.5rem]">
+          Price alerts in Telegram, written as one line.
+        </h1>
+        <p class="mt-5 text-[17px] leading-relaxed text-mute">
+          Price Bird watches tokens, CEX pairs, market caps and NFT floors, and messages you when your rule triggers.
+          Open source. Runs on your own server.
+        </p>
+        <div class="mt-8 flex flex-wrap gap-3">
+          <a href="https://t.me/price_dex_alerts_bot" class="btn-primary">Open in Telegram</a>
+          <a href="https://github.com/Sergio-prog/price-bird" class="btn-secondary">View source</a>
+        </div>
+      </section>
+
+      <section class="transcript mt-20 divide-y divide-rule border-y border-rule text-[14px] leading-[1.7]" aria-label="Example conversation">
+        <div class="grid grid-cols-[6rem_1fr] gap-4 py-5">
+          <span class="text-mute">you</span>
+          <pre>/alert BTC 10%</pre>
+        </div>
+        <div class="grid grid-cols-[6rem_1fr] gap-4 py-5">
+          <span class="text-mute">Price Bird</span>
+          <pre>✅ BTC is now on your watchlist.
+
+Trigger: Moves 10% up or down
+Baseline: $63,140
+Market: Binance BTC/USDT
+Mode: repeat</pre>
+        </div>
+        <div class="grid grid-cols-[6rem_1fr] gap-4 py-5">
+          <span class="text-mute">3 h later</span>
+          <pre>🔔 BTC ↑ +10.3%
+
+Rule: 10% move up or down
+Price: $69,642
+Market cap: $1.37T
+
+Source: <a href="https://www.binance.com/en/trade/BTC_USDT" class="text-link underline">Binance</a>
+Links: <a href="https://www.tradingview.com/symbols/BTCUSDT/" class="text-link underline">TradingView</a></pre>
+        </div>
+      </section>
+
+      <section id="self-host" class="mt-20">
+        <h2 class="text-[15px] font-medium">Self-host</h2>
+        <p class="mt-1.5 text-[15px] leading-relaxed text-mute">
+          One image, three services. <span class="inline-code">migrate</span> applies the schema,
+          <span class="inline-code">bot</span> talks to Telegram, <span class="inline-code">worker</span> fetches
+          prices and sends messages. Bring your own Postgres and Redis, or start the bundled ones with the
+          <span class="inline-code">infra</span> profile.
+        </p>
+        <pre class="mt-5 overflow-x-auto rounded-md border border-rule bg-well p-4 font-mono text-[13px] leading-[1.7]"><code>git clone https://github.com/Sergio-prog/price-bird
+cd price-bird
+cp .env.example .env
+docker compose --profile infra up -d --build</code></pre>
+        <p class="mt-4 text-[15px] leading-relaxed text-mute">
+          Fill <span class="inline-code">BOT_TOKEN</span> in <span class="inline-code">.env</span> first. Registration
+          stays allowlist-only until you set <span class="inline-code">PUBLIC_ACCESS_ENABLED=true</span>.
+        </p>
+      </section>
+
+      <footer class="mt-24 border-t border-rule pt-6 text-sm text-mute">
+        Made by <a href="https://serhiifotex.dev/" class="text-ink hover:underline">Serhii</a>
+      </footer>
+    </main>
+  </body>
+</html>

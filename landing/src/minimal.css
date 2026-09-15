@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --color-ink: #ededed;
+  --color-mute: #a1a1a1;
+  --color-rule: #262626;
+  --color-well: #111111;
+  --color-link: #52a8ff;
+  --color-lime: #b8f13b;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+    scroll-behavior: smooth;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
+  a {
+    text-underline-offset: 3px;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-link);
+    outline-offset: 3px;
+  }
+}
+
+@utility btn {
+  @apply inline-flex h-10 items-center rounded-md px-4 text-sm font-medium transition-colors;
+}
+
+@layer components {
+  .btn-primary {
+    @apply btn bg-ink text-black hover:bg-white;
+  }
+  .btn-secondary {
+    @apply btn border border-rule text-ink hover:bg-well;
+  }
+  .inline-code {
+    @apply rounded bg-well px-1 py-0.5 font-mono text-[13px] text-ink;
+  }
+  .transcript pre {
+    @apply whitespace-pre-wrap font-mono;
+  }
+}

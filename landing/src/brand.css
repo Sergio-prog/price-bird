@@ -1,0 +1,95 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --color-navy: #0b1626;
+  --color-deep: #08111d;
+  --color-panel: #101f34;
+  --color-sky: #3bc9ff;
+  --color-lime: #b8f13b;
+  --color-cloud: #e9f0f7;
+  --color-haze: #8a9ab0;
+  --color-line: rgb(233 240 247 / 0.12);
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
+  body {
+    font-variation-settings: "opsz" 14;
+  }
+  h1,
+  h2 {
+    font-variation-settings: "opsz" 96;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-lime);
+    outline-offset: 3px;
+  }
+}
+
+@utility btn {
+  @apply inline-flex h-11 items-center rounded-full px-5 text-[15px] font-semibold transition-colors;
+}
+
+@layer components {
+  .btn-primary {
+    @apply btn gap-2 bg-[#229ed9] text-white hover:bg-[#2fb0ee];
+  }
+  .btn-icon {
+    @apply inline-flex size-11 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20;
+  }
+  .section-title {
+    @apply text-[1.75rem] leading-[1.1] font-semibold tracking-[-0.02em] text-cloud md:text-[2.25rem];
+  }
+  .bubble {
+    @apply rounded-2xl bg-panel px-4 py-3 text-[14px] leading-[1.6];
+  }
+  .bubble a {
+    @apply text-sky underline underline-offset-2 hover:text-[#6ad6ff];
+  }
+  .reveal {
+    @apply transition-opacity duration-500;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal {
+      @apply transition-none;
+    }
+  }
+  .chip {
+    @apply rounded-full border border-line px-3 py-1 font-mono text-[12.5px] text-haze transition-colors hover:border-sky hover:text-sky;
+  }
+  code {
+    @apply font-mono;
+  }
+}
+
+.caret::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  margin-left: 2px;
+  vertical-align: -0.2em;
+  background: var(--color-sky);
+  animation: blink 1s steps(2, start) infinite;
+}
+
+@keyframes blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caret::after {
+    animation: none;
+  }
+}
