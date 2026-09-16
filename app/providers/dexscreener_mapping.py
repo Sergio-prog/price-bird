@@ -15,6 +15,7 @@ def normalize_chain(chain: str) -> str:
         "bsc": "bsc",
         "arbitrum": "arbitrum",
         "unichain": "unichain",
+        "arc": "arc",
     }
     return mapping.get(chain.lower(), chain.lower())
 

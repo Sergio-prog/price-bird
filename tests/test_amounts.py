@@ -50,4 +50,5 @@ def test_currency_helpers() -> None:
     assert native_symbol_or_none("USDC") is None
     assert native_symbol_or_none("SOL") == "SOL"
     assert chain_native_symbol("solana") == "SOL"
+    assert chain_native_symbol("arc") == "USDC"
     assert chain_native_symbol("unknown") is None

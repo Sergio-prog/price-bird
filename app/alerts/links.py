@@ -7,6 +7,7 @@ from app.db.models import Asset
 
 GMGN_CHAINS = {
     "arbitrum": "arb",
+    "arc": "arc",
     "base": "base",
     "bsc": "bsc",
     "ethereum": "eth",

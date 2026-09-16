@@ -13,6 +13,7 @@ _CHAIN_NATIVE = {
     "solana": "SOL",
     "bsc": "BNB",
     "avalanche": "AVAX",
+    "arc": "USDC",
 }
 
 
