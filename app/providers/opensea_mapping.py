@@ -4,11 +4,12 @@ import re
 from decimal import Decimal
 from typing import Any
 
-from app.core.config import settings
 from app.db.enums import AssetType
 from app.providers.base import AssetCandidate
-from app.utils.currency import chain_native_symbol
+from app.utils.currency import canonical_symbol, chain_native_symbol
 from app.utils.parsing import to_decimal
+
+DEFAULT_FLOOR_SYMBOL = "ETH"
 
 
 def candidate_from_collection(collection: dict[str, Any], *, provider_name: str) -> AssetCandidate:
@@ -18,9 +19,7 @@ def candidate_from_collection(collection: dict[str, Any], *, provider_name: str)
 
     name = collection.get("name") or slug
     image = collection.get("image_url") or collection.get("image")
-    contract = collection.get("contract") or collection.get("primary_asset_contracts")
-    if isinstance(contract, list):
-        contract = (contract[0] or {}).get("address") if contract else None
+    chain = chain_name(collection)
 
     links = {"opensea": f"https://opensea.io/collection/{slug}"}
     if collection.get("external_url"):
@@ -32,14 +31,14 @@ def candidate_from_collection(collection: dict[str, Any], *, provider_name: str)
         provider_asset_id=str(slug),
         symbol=str(slug).upper()[:64],
         name=name,
-        chain=chain_name(collection),
-        contract_address=contract,
+        chain=chain,
+        contract_address=collection.get("contract") or _primary_contract(collection).get("address"),
         metadata={
             "image": image,
             "description": collection.get("description"),
-            "chain": chain_name(collection),
+            "chain": chain,
             "source": provider_name,
-            "native_symbol": chain_native_symbol(chain_name(collection)) or "ETH",
+            "native_symbol": chain_native_symbol(chain) or DEFAULT_FLOOR_SYMBOL,
         },
         links=links,
     )
@@ -73,6 +72,11 @@ def floor_price(payload: dict[str, Any]) -> Decimal | None:
     return _stat(payload, "floor_price")
 
 
+def floor_symbol(payload: dict[str, Any]) -> str:
+    symbol = (payload.get("total") or {}).get("floor_price_symbol") or payload.get("floor_price_symbol")
+    return canonical_symbol(symbol) or DEFAULT_FLOOR_SYMBOL
+
+
 def market_cap(payload: dict[str, Any]) -> Decimal | None:
     value = _stat(payload, "market_cap")
     return value if value is not None and value > 0 else None
@@ -91,8 +95,12 @@ def _stat(payload: dict[str, Any], key: str) -> Decimal | None:
     return None
 
 
-def chain_name(collection: dict[str, Any]) -> str:
-    chain = collection.get("chain") or collection.get("chain_identifier") or settings.opensea_chain
-    if isinstance(chain, str):
-        return chain.lower()
-    return "ethereum"
+def chain_name(collection: dict[str, Any]) -> str | None:
+    chain = collection.get("chain") or collection.get("chain_identifier") or _primary_contract(collection).get("chain")
+    return chain.lower() if isinstance(chain, str) else None
+
+
+def _primary_contract(collection: dict[str, Any]) -> dict[str, Any]:
+    contracts = collection.get("contracts") or collection.get("primary_asset_contracts")
+    first = contracts[0] if isinstance(contracts, list) and contracts else None
+    return first if isinstance(first, dict) else {}

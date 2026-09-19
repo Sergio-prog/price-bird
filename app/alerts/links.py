@@ -3,6 +3,7 @@ from __future__ import annotations
 from html import escape
 from urllib.parse import quote_plus
 
+from app.db.enums import AssetType
 from app.db.models import Asset
 
 GMGN_CHAINS = {
@@ -23,7 +24,7 @@ def build_asset_links(asset: Asset) -> dict[str, str]:
     if "tradingview" not in links:
         links["tradingview"] = f"https://www.tradingview.com/search/?query={quote_plus(asset.symbol)}"
 
-    if asset.contract_address and asset.chain:
+    if asset.contract_address and asset.chain and asset.type != AssetType.NFT_COLLECTION:
         chain = asset.chain.lower()
         address = asset.contract_address
         if "dexscreener" not in links:

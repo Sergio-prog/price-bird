@@ -9,6 +9,8 @@ _CHAIN_NATIVE = {
     "optimism": "ETH",
     "blast": "ETH",
     "zora": "ETH",
+    "robinhood": "ETH",
+    "abstract": "ETH",
     "polygon": "POL",
     "solana": "SOL",
     "bsc": "BNB",

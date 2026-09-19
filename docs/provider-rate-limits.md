@@ -47,8 +47,10 @@ Source: [API keys](https://docs.opensea.io/reference/api-keys), [API overview](h
 - Free tier: 600 reads per hour and 30 writes per hour. Higher throughput requires contacting OpenSea.
 - Response headers expose `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`.
 - Keys expire. 401/403 means the key needs renewal.
-- A pasted NFT contract address costs up to 6 reads: `/api/v2/chain/{chain}/contract/{address}` is tried on the configured chain, then ethereum, base, arbitrum, optimism and polygon, followed by one collection read. It needs a valid key.
-- Unauthenticated limits for `/api/v2/collections/{slug}/stats` are not documented; the code currently polls floors without a key and this has not been measured.
+- Name search (`/api/v2/search`) runs across all chains. Results carry no chain or contract, so the chain is only known after a collection read.
+- A pasted NFT contract address costs up to 11 reads: `/api/v2/chain/{chain}/contract/{address}` is tried on `OPENSEA_CHAIN`, then ethereum, base, robinhood, abstract, ape_chain, hyperevm, monad, arbitrum, polygon and optimism, stopping at the first hit, followed by one collection read.
+- Every endpoint needs a valid key. Keyless requests return 401 unless a CDN copy happens to be cached, so do not rely on them (checked 2026-09-20).
+- Floors are converted with the currency in `floor_price_symbol` (ETH, SOL, POL, ...), not a fixed ETH rate.
 
 ## Reservoir
 
@@ -76,7 +78,8 @@ The worker never sends at the published limit. Defaults live in `app/core/config
 | `NFT_REFRESH_INTERVAL_SECONDS` | 300 | keeps ~100 collections inside the OpenSea budget |
 | `SEARCH_CACHE_SECONDS` | 120 | repeated user searches do not hit providers |
 
-Each throttle allows a burst of one fifth of its per-minute rate, then refills continuously. A 429 pauses only that
+Each throttle allows a burst of one fifth of its per-minute rate, then refills continuously. OpenSea is the exception
+with a burst of 10, so a contract lookup does not wait ~7s per chain; the hourly average stays at the budget. A 429 pauses only that
 provider for the `Retry-After` value; a Binance 418 pauses ccxt until the ban timestamp in the error message.
 
 ## Getting a better OpenSea key

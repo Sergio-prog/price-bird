@@ -13,9 +13,11 @@ from app.db.models import Asset
 from app.providers.base import AssetCandidate, PriceQuote, ProviderConfigurationError, sequential_prices
 from app.providers.cex import default_cex_provider
 from app.providers.opensea_mapping import (
+    DEFAULT_FLOOR_SYMBOL,
     candidate_from_collection,
     collections_from_search,
     floor_price,
+    floor_symbol,
     market_cap,
     slug_variants,
 )
@@ -25,7 +27,20 @@ from app.utils.ratelimit import ProviderThrottle
 
 logger = logging.getLogger(__name__)
 
-CONTRACT_LOOKUP_CHAINS = ("ethereum", "base", "arbitrum", "optimism", "polygon")
+CONTRACT_LOOKUP_CHAINS = (
+    "ethereum",
+    "base",
+    "robinhood",
+    "abstract",
+    "ape_chain",
+    "hyperevm",
+    "monad",
+    "arbitrum",
+    "polygon",
+    "optimism",
+)
+THROTTLE_BURST = 10
+USD = "USD"
 
 
 class OpenSeaNftProvider:
@@ -36,18 +51,16 @@ class OpenSeaNftProvider:
         *,
         base_url: str | None = None,
         api_key: str | None = None,
-        eth_usd_symbol: str = "ETH/USDT",
         price_source: Callable[[str], Awaitable[Decimal]] | None = None,
     ) -> None:
         self.base_url = (base_url or settings.opensea_base_url).rstrip("/")
         self.api_key = api_key if api_key is not None else settings.opensea_api_key
-        self.eth_usd_symbol = eth_usd_symbol
         self._price_source = price_source or default_cex_provider.last_price
         headers = {"accept": "application/json"}
         if self.api_key:
             headers["x-api-key"] = self.api_key
         self.client = HttpClient(
-            throttle=ProviderThrottle(self.name, rate_per_minute=settings.opensea_reads_per_hour / 60),
+            throttle=ProviderThrottle(self.name, rate_per_minute=settings.opensea_reads_per_hour / 60, burst=THROTTLE_BURST),
             headers=headers,
         )
 
@@ -75,40 +88,44 @@ class OpenSeaNftProvider:
         raise configuration_error
 
     async def get_price(self, asset: Asset) -> PriceQuote:
-        return await self._quote(asset, await self._get_eth_usd())
+        return await self._quote(asset, {})
 
     async def get_prices(self, assets: Sequence[Asset]) -> dict[int, PriceQuote]:
         if not assets:
             return {}
         try:
-            eth_usd = await self._get_eth_usd()
+            usd_rates = {DEFAULT_FLOOR_SYMBOL: await self._usd_rate(DEFAULT_FLOOR_SYMBOL)}
         except Exception:
-            logger.exception("Skipped OpenSea batch because ETH/USD is unavailable")
+            logger.exception("Skipped OpenSea batch because %s/USD is unavailable", DEFAULT_FLOOR_SYMBOL)
             return {}
-        return await sequential_prices(self.name, assets, partial(self._quote, eth_usd=eth_usd))
+        return await sequential_prices(self.name, assets, partial(self._quote, usd_rates=usd_rates))
 
     async def close(self) -> None:
         await self.client.close()
 
-    async def _quote(self, asset: Asset, eth_usd: Decimal) -> PriceQuote:
+    async def _quote(self, asset: Asset, usd_rates: dict[str, Decimal]) -> PriceQuote:
         stats = await self._get_json(f"/api/v2/collections/{asset.provider_asset_id}/stats", params={})
         floor_native = floor_price(stats or {})
         if floor_native is None:
             raise LookupError(f"No OpenSea floor price found for {asset.symbol}")
 
+        symbol = floor_symbol(stats or {})
+        if symbol not in usd_rates:
+            usd_rates[symbol] = await self._usd_rate(symbol)
+        usd_rate = usd_rates[symbol]
         market_cap_native = market_cap(stats or {})
         return PriceQuote(
-            price_usd=floor_native * eth_usd,
-            price_native=floor_native,
-            native_symbol="ETH",
-            market_cap_usd=market_cap_native * eth_usd if market_cap_native is not None else None,
+            price_usd=floor_native * usd_rate,
+            price_native=None if symbol == USD else floor_native,
+            native_symbol=None if symbol == USD else symbol,
+            market_cap_usd=market_cap_native * usd_rate if market_cap_native is not None else None,
             source=self.name,
             raw={
                 **stats,
                 "provider": self.name,
-                "chain": settings.opensea_chain,
-                "native_symbol": "ETH",
-                "eth_usd": str(eth_usd),
+                "chain": asset.chain,
+                "native_symbol": symbol,
+                "usd_rate": str(usd_rate),
             },
         )
 
@@ -117,7 +134,6 @@ class OpenSeaNftProvider:
             "/api/v2/search",
             params={
                 "query": query,
-                "chains": settings.opensea_chain,
                 "asset_types": "collection",
                 "limit": "10",
             },
@@ -168,5 +184,5 @@ class OpenSeaNftProvider:
                 raise ProviderConfigurationError(f"OpenSea rejected the API key ({exc.status}); renew OPENSEA_API_KEY") from exc
             raise
 
-    async def _get_eth_usd(self) -> Decimal:
-        return await self._price_source(self.eth_usd_symbol)
+    async def _usd_rate(self, symbol: str) -> Decimal:
+        return Decimal(1) if symbol == USD else await self._price_source(f"{symbol}/USDT")
