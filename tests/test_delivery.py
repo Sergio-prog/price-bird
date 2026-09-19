@@ -170,6 +170,13 @@ async def test_disabled_destination_is_cancelled_before_send(monkeypatch):
 async def test_quiet_hours_send_telegram_alert_without_sound(monkeypatch):
     from app.delivery import worker
 
+    class NoonUtc(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 1, 1, 12, 0, tzinfo=tz)
+
+    monkeypatch.setattr(worker, "datetime", NoonUtc)
+
     statements = []
 
     class Session:
