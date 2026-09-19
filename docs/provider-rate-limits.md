@@ -28,8 +28,16 @@ Source: [reference](https://docs.dexscreener.com/api/reference), [API terms](htt
 - 300 requests per minute for `/latest/dex/search`, `/latest/dex/tokens/*`, `/latest/dex/pairs/*`, `/tokens/v1/*`, `/token-pairs/v1/*`.
 - 60 requests per minute for token profiles, boosts, ads, community takeovers and metas.
 - `/tokens/v1/{chainId}/{tokenAddresses}` and `/latest/dex/tokens/{tokenAddresses}` accept up to 30 comma-separated addresses per request.
+- `/latest/dex/pairs/{chainId}/{pairAddresses}` takes up to 30 pool addresses; it prices alerts created from a pasted pool address.
 - Search and price polling share the same 300/min pool.
 - Terms allow commercial use but forbid building a product whose primary purpose competes with DEX Screener, and forbid reselling the API.
+
+## Hyperliquid
+
+Source: [rate limits](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/rate-limits-and-user-limits). Verified 2026-09-19.
+
+- No API keys. 1200 request weight per minute per IP across all REST calls.
+- `spotMetaAndAssetCtxs` and `metaAndAssetCtxs` cost 20 each and return every spot or perp market, so one refresh is at most two requests regardless of how many assets are watched. A search costs the same two requests.
 
 ## OpenSea
 
@@ -39,6 +47,7 @@ Source: [API keys](https://docs.opensea.io/reference/api-keys), [API overview](h
 - Free tier: 600 reads per hour and 30 writes per hour. Higher throughput requires contacting OpenSea.
 - Response headers expose `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`.
 - Keys expire. 401/403 means the key needs renewal.
+- A pasted NFT contract address costs up to 6 reads: `/api/v2/chain/{chain}/contract/{address}` is tried on the configured chain, then ethereum, base, arbitrum, optimism and polygon, followed by one collection read. It needs a valid key.
 - Unauthenticated limits for `/api/v2/collections/{slug}/stats` are not documented; the code currently polls floors without a key and this has not been measured.
 
 ## Reservoir
@@ -62,6 +71,7 @@ The worker never sends at the published limit. Defaults live in `app/core/config
 | `CCXT_REQUESTS_PER_MINUTE` | 600 | 6000 weight/min; a 20-symbol ticker batch costs 2 |
 | `CCXT_MARKETS_TTL_SECONDS` | 3600 | `exchangeInfo` costs 20, so markets are cached |
 | `DEXSCREENER_REQUESTS_PER_MINUTE` | 240 | 300/min shared with search |
+| `HYPERLIQUID_REQUESTS_PER_MINUTE` | 40 | 1200 weight/min; every request costs 20, so 60/min |
 | `OPENSEA_READS_PER_HOUR` | 540 | 600/h on a free key |
 | `NFT_REFRESH_INTERVAL_SECONDS` | 300 | keeps ~100 collections inside the OpenSea budget |
 | `SEARCH_CACHE_SECONDS` | 120 | repeated user searches do not hit providers |

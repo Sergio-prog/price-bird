@@ -73,21 +73,25 @@ button-back = ↩️ Back
 button-back-to-menu = ↩️ Back to menu
 button-menu = 🏠 Menu
 button-add-another = ➕ Add another
+button-edit-alert = ✏️ Edit alert
 
 ## Alert wizard
 
 asset-type-prompt = What market are we watching?
 asset-type-token = 🪙 Coins / CEX
 asset-type-nft = 🖼 NFT floor
-query-prompt-token = 🔎 Send a ticker, contract, or CEX pair. Example: <code>BONK</code> or <code>BTC</code>
-query-prompt-nft = 🖼 Send the NFT collection name. Example: <code>milady</code>
+query-prompt-token = 🔎 Send a ticker, a token or pool address, or a CEX pair. Example: <code>BONK</code> or <code>BTC</code>
+query-prompt-nft = 🖼 Send the NFT collection name or contract address. Example: <code>milady</code>
 provider-failed-token = Failed to search assets. Provider is unavailable right now. Try again later.
 provider-failed-nft = Failed to search NFT collections. Provider is unavailable right now. Try again later.
 provider-misconfigured-token = Asset search is unavailable: provider is not configured. Ask an admin to check the bot settings.
 provider-misconfigured-nft = NFT search is unavailable: the OpenSea API key is missing or expired. Ask an admin to renew it.
-no-matches-token = No assets found. Try a ticker, contract address, or a shorter name.
-no-matches-nft = No NFT collections found. Try the collection slug or a shorter name.
-candidates-prompt = Select the asset to watch:
+no-matches-token = No assets found. Try a ticker, a token or pool address, or a shorter name.
+no-matches-nft = No NFT collections found. Try the collection slug, contract address, or a shorter name.
+candidates-prompt = Select the asset to watch. Most traded first.
+sources-prompt = Show results from:
+source-all = All
+button-source-filter = 🔀 Source: { $source }
 alert-type-prompt = Choose when this alert should trigger:
 alert-type-percent = 📈 Move % up/down
 alert-type-above = 🚀 Breaks above

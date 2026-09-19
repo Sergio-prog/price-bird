@@ -91,3 +91,32 @@ async def test_ban_pauses_provider() -> None:
         await provider.get_price(_assets(1)[0])
 
     assert provider.throttle.remaining_pause() > 100
+
+
+@pytest.mark.asyncio
+async def test_search_offers_only_the_busiest_spot_stable_pair() -> None:
+    class SearchExchange(FakeExchange):
+        async def load_markets(self, reload: bool = False) -> dict:
+            self.markets = {
+                "BTC/USDT": {"base": "BTC", "quote": "USDT", "type": "spot"},
+                "BTC/USDC": {"base": "BTC", "quote": "USDC", "type": "spot"},
+                "BTC/USDT:USDT": {"base": "BTC", "quote": "USDT", "type": "swap"},
+                "BTC/EUR": {"base": "BTC", "quote": "EUR", "type": "spot"},
+            }
+            return self.markets
+
+        async def fetch_tickers(self, symbols: list[str]) -> dict:
+            self.batches.append(symbols)
+            return {
+                "BTC/USDT": {"last": 81000.5, "quoteVolume": 2e9},
+                "BTC/USDC": {"last": 81001.0, "quoteVolume": 3e8},
+            }
+
+    exchange = SearchExchange()
+
+    candidates = await _provider(exchange).search_assets("btc")
+
+    assert exchange.batches == [["BTC/USDT", "BTC/USDC"]]
+    assert [candidate.provider_asset_id for candidate in candidates] == ["binance:BTC/USDT"]
+    assert candidates[0].metadata == {"exchange": "binance", "price_usd": "81000.5"}
+    assert candidates[0].volume_usd == 2e9

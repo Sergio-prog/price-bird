@@ -24,6 +24,11 @@ class AssetCandidate:
     contract_address: str | None = None
     metadata: dict = field(default_factory=dict)
     links: dict[str, str] = field(default_factory=dict)
+    volume_usd: float = 0.0
+
+    @property
+    def venue(self) -> str:
+        return self.metadata.get("exchange") or self.chain or self.provider
 
 
 @dataclass(frozen=True)

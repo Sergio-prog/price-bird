@@ -78,3 +78,22 @@ async def test_search_results_are_cached_per_query() -> None:
     await registry.search_assets("btc", nft=True)
 
     assert calls == ["BTC", "btc"]
+
+
+@pytest.mark.asyncio
+async def test_search_ranks_exact_ticker_matches_by_volume() -> None:
+    def candidate(provider: str, symbol: str, volume_usd: float) -> AssetCandidate:
+        return AssetCandidate(
+            type=AssetType.TOKEN, provider=provider, provider_asset_id=symbol, symbol=symbol, volume_usd=volume_usd
+        )
+
+    registry = ProviderRegistry(
+        providers=[
+            FakeProvider(name="dex", candidates=[candidate("dex", "HYPER", 9e9), candidate("dex", "HYPE", 1e6)]),
+            FakeProvider(name="hl", candidates=[candidate("hl", "HYPE/USDC", 4e8), candidate("hl", "HYPE-PERP", 4e8)]),
+        ]
+    )
+
+    results = await registry.search_assets("hype")
+
+    assert [result.symbol for result in results] == ["HYPE/USDC", "HYPE-PERP", "HYPE", "HYPER"]

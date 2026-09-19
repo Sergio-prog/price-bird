@@ -59,11 +59,25 @@ class HttpClient:
         self._loop = None
 
     async def get_json(self, url: str, *, params: dict[str, str] | None = None, missing_ok: bool = False) -> Any:
+        return await self._request_json("GET", url, params=params, missing_ok=missing_ok)
+
+    async def post_json(self, url: str, *, body: dict[str, Any]) -> Any:
+        return await self._request_json("POST", url, body=body)
+
+    async def _request_json(
+        self,
+        method: str,
+        url: str,
+        *,
+        params: dict[str, str] | None = None,
+        body: dict[str, Any] | None = None,
+        missing_ok: bool = False,
+    ) -> Any:
         last_error: Exception | None = None
         for attempt in range(settings.provider_max_attempts):
             await self.throttle.acquire()
             try:
-                async with self.session().get(url, params=params) as response:
+                async with self.session().request(method, url, params=params, json=body) as response:
                     if response.status == 429:
                         delay = retry_after_seconds(response, attempt)
                         self.throttle.pause(delay)

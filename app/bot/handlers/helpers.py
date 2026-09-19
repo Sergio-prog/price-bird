@@ -68,7 +68,7 @@ async def create_alert_from_candidate(
             market=asset_kind_label(asset),
             mode=t("mode-repeat" if alert.repeat else "mode-one-time"),
         ),
-        reply_markup=alert_created_keyboard(),
+        reply_markup=alert_created_keyboard(alert.id),
         parse_mode="HTML",
         edit_message=edit_message,
         edit_chat_id=edit_chat_id,
@@ -139,6 +139,7 @@ def candidate_from_dict(data: dict) -> AssetCandidate:
         contract_address=data.get("contract_address"),
         metadata=data.get("metadata") or {},
         links=data.get("links") or {},
+        volume_usd=data.get("volume_usd") or 0.0,
     )
 
 

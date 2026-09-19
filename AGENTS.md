@@ -7,3 +7,4 @@ This is a hobby project, which I want to make as **working product** in future. 
 - consider that i want to make it production ready. think about that.
 - Default to production-minded choices: timeouts, retries, idempotency, rate-limit handling, and clear failure modes.
 - For Telegram button callbacks, edit the existing message instead of sending a new one. Send a new message when the flow waits for user input or must preserve separate content such as a one-time secret.
+- When you add or change any user-facing text or button label, update every locale file in `app/i18n/locales/` (`en`, `uk`, `ru`) in the same change.

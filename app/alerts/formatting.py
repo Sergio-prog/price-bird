@@ -6,6 +6,7 @@ from app.db.enums import AlertType
 from app.i18n import t
 
 _MAX_FRACTION_DIGITS = 18
+VENUE_LABELS = {"bsc": "BSC", "okx": "OKX", "ton": "TON", "opensea": "OpenSea"}
 
 
 def _trim(text: str) -> str:
@@ -79,3 +80,7 @@ def format_direction_arrows(value: str) -> str:
 def format_change(percent: Decimal, direction: str | None = None) -> str:
     arrow = format_direction_arrows(direction or ("down" if percent < 0 else "up"))
     return f"{arrow} {format_percent(percent, signed=True)}"
+
+
+def venue_label(venue: str) -> str:
+    return VENUE_LABELS.get(venue.lower(), venue.replace("_", " ").title())

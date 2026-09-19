@@ -73,21 +73,25 @@ button-back = ↩️ Назад
 button-back-to-menu = ↩️ Назад в меню
 button-menu = 🏠 Меню
 button-add-another = ➕ Добавить ещё
+button-edit-alert = ✏️ Изменить алерт
 
 ## Alert wizard
 
 asset-type-prompt = За каким рынком следим?
 asset-type-token = 🪙 Монеты / CEX
 asset-type-nft = 🖼 Флор NFT
-query-prompt-token = 🔎 Отправь тикер, контракт или CEX-пару. Например: <code>BONK</code> или <code>BTC</code>
-query-prompt-nft = 🖼 Отправь название коллекции NFT. Например: <code>milady</code>
+query-prompt-token = 🔎 Отправь тикер, адрес токена или пула либо CEX-пару. Например: <code>BONK</code> или <code>BTC</code>
+query-prompt-nft = 🖼 Отправь название коллекции NFT или адрес контракта. Например: <code>milady</code>
 provider-failed-token = Не удалось найти активы. Провайдер сейчас недоступен. Попробуй позже.
 provider-failed-nft = Не удалось найти коллекции NFT. Провайдер сейчас недоступен. Попробуй позже.
 provider-misconfigured-token = Поиск активов недоступен: провайдер не настроен. Попроси админа проверить настройки бота.
 provider-misconfigured-nft = Поиск NFT недоступен: отсутствует или истёк ключ OpenSea API. Попроси админа обновить его.
-no-matches-token = Активы не найдены. Попробуй тикер, адрес контракта или более короткое название.
-no-matches-nft = Коллекции не найдены. Попробуй slug коллекции или более короткое название.
-candidates-prompt = Выбери актив для отслеживания:
+no-matches-token = Активы не найдены. Попробуй тикер, адрес токена или пула либо более короткое название.
+no-matches-nft = Коллекции не найдены. Попробуй slug коллекции, адрес контракта или более короткое название.
+candidates-prompt = Выбери актив для отслеживания. Сначала самые торгуемые.
+sources-prompt = Показать результаты из:
+source-all = Все
+button-source-filter = 🔀 Источник: { $source }
 alert-type-prompt = Выбери, когда алерт должен сработать:
 alert-type-percent = 📈 Изменение %
 alert-type-above = 🚀 Пробой вверх

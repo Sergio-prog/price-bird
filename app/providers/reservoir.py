@@ -8,6 +8,7 @@ from app.db.models import Asset
 from app.providers.base import AssetCandidate, PriceQuote, sequential_prices
 from app.providers.reservoir_mapping import candidate_from_collection, chain_name, floor_price
 from app.utils.http import HttpClient
+from app.utils.parsing import is_evm_address
 from app.utils.ratelimit import ProviderThrottle
 
 REQUESTS_PER_MINUTE = 60
@@ -28,15 +29,18 @@ class ReservoirNftProvider:
         if not nft:
             return []
 
-        payload = await self._get_json(
-            "/collections/search/v1",
-            params={
-                "prefix": query,
-                "excludeSpam": "true",
-                "excludeNsfw": "true",
-                "limit": "10",
-            },
-        )
+        if is_evm_address(query):
+            payload = await self._get_json("/collections/v7", params={"id": query.strip(), "limit": "1"})
+        else:
+            payload = await self._get_json(
+                "/collections/search/v1",
+                params={
+                    "prefix": query,
+                    "excludeSpam": "true",
+                    "excludeNsfw": "true",
+                    "limit": "10",
+                },
+            )
         candidates: list[AssetCandidate] = []
         for collection in payload.get("collections") or []:
             try:

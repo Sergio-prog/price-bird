@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     ccxt_requests_per_minute: int = Field(default=600, alias="CCXT_REQUESTS_PER_MINUTE")
     ccxt_markets_ttl_seconds: int = Field(default=3600, alias="CCXT_MARKETS_TTL_SECONDS")
     dexscreener_requests_per_minute: int = Field(default=240, alias="DEXSCREENER_REQUESTS_PER_MINUTE")
+    hyperliquid_requests_per_minute: int = Field(default=40, alias="HYPERLIQUID_REQUESTS_PER_MINUTE")
     opensea_reads_per_hour: int = Field(default=540, alias="OPENSEA_READS_PER_HOUR")
     notification_max_attempts: int = Field(default=5, alias="NOTIFICATION_MAX_ATTEMPTS")
     integration_secrets_key: str = Field(default="", alias="INTEGRATION_SECRETS_KEY")

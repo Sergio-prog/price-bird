@@ -4,13 +4,16 @@ from math import ceil
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from app.alerts.formatting import format_direction_arrows, format_percent, format_threshold
-from app.db.enums import AlertStatus, AlertType
+from app.alerts.formatting import format_direction_arrows, format_percent, format_threshold, venue_label
+from app.db.enums import AlertStatus, AlertType, AssetType
 from app.db.models import Alert
 from app.i18n import t
 from app.providers.base import AssetCandidate
 
 ALERTS_PAGE_SIZE = 8
+CANDIDATES_LIMIT = 6
+FILTERED_CANDIDATES_LIMIT = 8
+SOURCES_PER_ROW = 2
 
 
 def start_menu_keyboard() -> InlineKeyboardMarkup:
@@ -42,19 +45,41 @@ def wizard_back_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[_wizard_nav_row()])
 
 
-def asset_candidates_keyboard(candidates: list[AssetCandidate], *, back_to_menu: bool = False) -> InlineKeyboardMarkup:
-    rows = []
-    for index, candidate in enumerate(candidates[:10]):
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=_asset_candidate_label(candidate),
-                    callback_data=f"asset:{index}",
-                )
-            ]
-        )
+def asset_candidates_keyboard(
+    candidates: list[AssetCandidate], *, venue: str | None = None, back_to_menu: bool = False
+) -> InlineKeyboardMarkup:
+    shown = [(index, candidate) for index, candidate in enumerate(candidates) if venue in {None, candidate.venue}]
+    shown = shown[: FILTERED_CANDIDATES_LIMIT if venue else CANDIDATES_LIMIT]
+    ambiguous = _ambiguous_labels([candidate for _, candidate in shown])
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=_asset_candidate_label(candidate, with_address=_label_key(candidate) in ambiguous),
+                callback_data=f"asset:{index}",
+            )
+        ]
+        for index, candidate in shown
+    ]
+    if len(candidate_venues(candidates)) > 1:
+        source = venue_label(venue) if venue else t("source-all")
+        rows.append([InlineKeyboardButton(text=t("button-source-filter", source=source), callback_data="asset_source:menu")])
     rows.append(_menu_button_row() if back_to_menu else _wizard_nav_row())
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def asset_sources_keyboard(candidates: list[AssetCandidate], *, venue: str | None = None) -> InlineKeyboardMarkup:
+    venues = candidate_venues(candidates)
+    buttons = [_source_button(t("source-all"), len(candidates), selected=venue is None, callback_data="asset_source:all")]
+    for index, name in enumerate(venues):
+        count = sum(1 for candidate in candidates if candidate.venue == name)
+        buttons.append(_source_button(venue_label(name), count, selected=venue == name, callback_data=f"asset_source:{index}"))
+    rows = [buttons[start : start + SOURCES_PER_ROW] for start in range(0, len(buttons), SOURCES_PER_ROW)]
+    rows.append([InlineKeyboardButton(text=t("button-back"), callback_data="asset_source:back")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def candidate_venues(candidates: list[AssetCandidate]) -> list[str]:
+    return list(dict.fromkeys(candidate.venue for candidate in candidates))
 
 
 def alert_type_keyboard() -> InlineKeyboardMarkup:
@@ -86,9 +111,10 @@ def threshold_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def alert_created_keyboard() -> InlineKeyboardMarkup:
+def alert_created_keyboard(alert_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
+            [InlineKeyboardButton(text=t("button-edit-alert"), callback_data=f"alert_config:view:{alert_id}")],
             [InlineKeyboardButton(text=t("button-add-another"), callback_data="menu:newalert")],
             [InlineKeyboardButton(text=t("menu-active-alerts"), callback_data="menu:alerts")],
             [InlineKeyboardButton(text=t("button-menu"), callback_data="wizard:cancel")],
@@ -160,16 +186,32 @@ def _wizard_nav_row() -> list[InlineKeyboardButton]:
     ]
 
 
-def _asset_candidate_label(candidate: AssetCandidate) -> str:
-    parts = [candidate.symbol]
-    if candidate.chain:
-        parts.append(candidate.chain)
-    if pair := candidate.metadata.get("pair"):
-        parts.append(str(pair))
+def _source_button(label: str, count: int, *, selected: bool, callback_data: str) -> InlineKeyboardButton:
+    text = f"{'✅ ' if selected else ''}{label} ({count})"
+    return InlineKeyboardButton(text=_truncate_button_text(text), callback_data=callback_data)
+
+
+def _asset_candidate_label(candidate: AssetCandidate, *, with_address: bool = False) -> str:
+    parts = [_label_key(candidate)[0], venue_label(candidate.venue)]
     if price := candidate.metadata.get("price_usd"):
         parts.append(f"${price}")
-    parts.append(candidate.provider)
-    return _truncate_button_text(" / ".join(parts))
+    if with_address and candidate.contract_address:
+        parts.append(_short_address(candidate.contract_address))
+    return _truncate_button_text(" · ".join(parts))
+
+
+def _label_key(candidate: AssetCandidate) -> tuple[str, str]:
+    title = candidate.name if candidate.type == AssetType.NFT_COLLECTION and candidate.name else candidate.symbol
+    return title, candidate.venue
+
+
+def _ambiguous_labels(candidates: list[AssetCandidate]) -> set[tuple[str, str]]:
+    keys = [_label_key(candidate) for candidate in candidates]
+    return {key for key in keys if keys.count(key) > 1}
+
+
+def _short_address(address: str) -> str:
+    return address if len(address) <= 10 else f"{address[:4]}…{address[-4:]}"
 
 
 def _truncate_button_text(text: str, limit: int = 64) -> str:

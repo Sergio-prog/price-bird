@@ -3,8 +3,10 @@ from types import SimpleNamespace
 
 from app.bot.keyboards import (
     alert_button_label,
+    alert_created_keyboard,
     alert_list_keyboard,
     asset_candidates_keyboard,
+    asset_sources_keyboard,
     asset_type_keyboard,
     back_to_menu_keyboard,
     start_menu_keyboard,
@@ -110,24 +112,76 @@ def test_threshold_keyboard_offers_one_time_toggle_for_market_cap() -> None:
     assert threshold_keyboard("above").inline_keyboard[0][0].callback_data == "wizard:back"
 
 
-def test_asset_candidates_keyboard_includes_pair_and_price() -> None:
+def _candidate(symbol: str, *, chain: str | None = None, exchange: str | None = None, price: str = "1", address: str = "abc"):
+    return AssetCandidate(
+        type=AssetType.CEX_SYMBOL if exchange else AssetType.TOKEN,
+        provider="ccxt" if exchange else "dexscreener",
+        provider_asset_id=f"{exchange or chain}:{address}",
+        symbol=symbol,
+        chain=chain,
+        contract_address=None if exchange else address,
+        metadata={"price_usd": price, **({"exchange": exchange} if exchange else {})},
+    )
+
+
+def test_asset_candidates_keyboard_uses_short_labels() -> None:
+    keyboard = asset_candidates_keyboard([_candidate("BONK", chain="solana", price="0.00001823")])
+
+    button = keyboard.inline_keyboard[0][0]
+    assert button.text == "BONK · Solana · $0.00001823"
+    assert button.callback_data == "asset:0"
+    assert keyboard.inline_keyboard[1][0].callback_data == "wizard:back"
+
+
+def test_asset_candidates_keyboard_disambiguates_same_symbol_tokens() -> None:
     keyboard = asset_candidates_keyboard(
         [
-            AssetCandidate(
-                type=AssetType.TOKEN,
-                provider="dexscreener",
-                provider_asset_id="solana:abc",
-                symbol="BONK",
-                chain="solana",
-                metadata={"pair": "BONK/SOL", "price_usd": "0.00001823"},
-            )
+            _candidate("HYPE", chain="solana", address="98sMhvDwXjMh5g"),
+            _candidate("HYPE", chain="solana", address="F7eL5pudRQabcd"),
         ]
     )
 
-    button = keyboard.inline_keyboard[0][0]
-    assert button.text == "BONK / solana / BONK/SOL / $0.00001823 / dexscreener"
-    assert button.callback_data == "asset:0"
-    assert keyboard.inline_keyboard[1][0].callback_data == "wizard:back"
+    assert keyboard.inline_keyboard[0][0].text == "HYPE · Solana · $1 · 98sM…Mh5g"
+    assert keyboard.inline_keyboard[1][0].text == "HYPE · Solana · $1 · F7eL…abcd"
+
+
+def test_asset_candidates_keyboard_filters_by_source_and_keeps_indexes() -> None:
+    candidates = [
+        _candidate("HYPE/USDC", exchange="hyperliquid"),
+        _candidate("HYPE", chain="solana"),
+        _candidate("HYPE", chain="arc"),
+    ]
+
+    everything = asset_candidates_keyboard(candidates)
+    filtered = asset_candidates_keyboard(candidates, venue="arc")
+
+    assert everything.inline_keyboard[3][0].text == "🔀 Source: All"
+    assert [row[0].callback_data for row in filtered.inline_keyboard[:2]] == ["asset:2", "asset_source:menu"]
+    assert filtered.inline_keyboard[1][0].text == "🔀 Source: Arc"
+
+
+def test_asset_sources_keyboard_lists_sources_with_counts() -> None:
+    candidates = [
+        _candidate("HYPE/USDC", exchange="hyperliquid"),
+        _candidate("HYPE", chain="solana", address="a"),
+        _candidate("HYPE", chain="solana", address="b"),
+    ]
+
+    keyboard = asset_sources_keyboard(candidates, venue="solana")
+
+    buttons = [button for row in keyboard.inline_keyboard for button in row]
+    assert [(button.text, button.callback_data) for button in buttons] == [
+        ("All (3)", "asset_source:all"),
+        ("Hyperliquid (1)", "asset_source:0"),
+        ("✅ Solana (2)", "asset_source:1"),
+        ("↩️ Back", "asset_source:back"),
+    ]
+
+
+def test_alert_created_keyboard_opens_the_new_alert_for_editing() -> None:
+    button = alert_created_keyboard(42).inline_keyboard[0][0]
+
+    assert (button.text, button.callback_data) == ("✏️ Edit alert", "alert_config:view:42")
 
 
 def test_threshold_keyboard_offers_currency_toggle_only_with_native_symbol() -> None:

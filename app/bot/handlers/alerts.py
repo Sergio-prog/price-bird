@@ -23,8 +23,10 @@ from app.bot.keyboards import (
     alert_list_keyboard,
     alert_type_keyboard,
     asset_candidates_keyboard,
+    asset_sources_keyboard,
     asset_type_keyboard,
     back_to_menu_keyboard,
+    candidate_venues,
     start_menu_keyboard,
     threshold_keyboard,
     wizard_back_keyboard,
@@ -234,7 +236,7 @@ async def wizard_query(message: Message, state: FSMContext, session: AsyncSessio
     if not candidates:
         await _send_wizard_message(message, state, no_matches_message(nft=nft), reply_markup=wizard_back_keyboard())
         return
-    await state.update_data(candidates=[candidate.__dict__ for candidate in candidates])
+    await state.update_data(candidates=[candidate.__dict__ for candidate in candidates], asset_venue=None)
     await state.set_state(AlertWizard.waiting_asset)
     await _send_wizard_message(message, state, t("candidates-prompt"), reply_markup=asset_candidates_keyboard(candidates))
 
@@ -263,6 +265,23 @@ async def wizard_asset(callback: CallbackQuery, state: FSMContext, session: Asyn
         await state.set_state(AlertWizard.waiting_type)
         if isinstance(callback.message, Message):
             await callback.message.edit_text(t("alert-type-prompt"), reply_markup=alert_type_keyboard())
+    await callback.answer()
+
+
+@router.callback_query(AlertWizard.waiting_asset, F.data.startswith("asset_source:"))
+async def wizard_asset_source(callback: CallbackQuery, state: FSMContext) -> None:
+    action = (callback.data or "").split(":", 1)[1]
+    data = await state.get_data()
+    if action == "menu":
+        candidates = [candidate_from_dict(raw) for raw in data.get("candidates", [])]
+        text, reply_markup = t("sources-prompt"), asset_sources_keyboard(candidates, venue=data.get("asset_venue"))
+    else:
+        if action != "back":
+            data["asset_venue"] = _venue_for_action(data, action)
+            await state.update_data(asset_venue=data["asset_venue"])
+        text, reply_markup = t("candidates-prompt"), _candidates_keyboard(data)
+    if isinstance(callback.message, Message):
+        await _edit_message(callback.message, text, reply_markup=reply_markup)
     await callback.answer()
 
 
@@ -310,10 +329,9 @@ async def wizard_back_to_query(callback: CallbackQuery, state: FSMContext) -> No
 @router.callback_query(AlertWizard.waiting_type, F.data == "wizard:back")
 async def wizard_back_to_candidates(callback: CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
-    candidates = [candidate_from_dict(raw) for raw in data.get("candidates", [])]
     await state.set_state(AlertWizard.waiting_asset)
     if isinstance(callback.message, Message):
-        await _edit_message(callback.message, t("candidates-prompt"), reply_markup=asset_candidates_keyboard(candidates))
+        await _edit_message(callback.message, t("candidates-prompt"), reply_markup=_candidates_keyboard(data))
     await callback.answer()
 
 
@@ -423,6 +441,21 @@ async def _render_threshold_step(message: Message, data: dict) -> None:
         reply_markup=_threshold_keyboard(data),
         parse_mode="HTML",
     )
+
+
+def _candidates_keyboard(data: dict) -> InlineKeyboardMarkup:
+    return asset_candidates_keyboard(
+        [candidate_from_dict(raw) for raw in data.get("candidates", [])],
+        venue=data.get("asset_venue"),
+        back_to_menu=bool(data.get("parsed")),
+    )
+
+
+def _venue_for_action(data: dict, action: str) -> str | None:
+    venues = candidate_venues([candidate_from_dict(raw) for raw in data.get("candidates", [])])
+    if action.isdigit() and int(action) < len(venues):
+        return venues[int(action)]
+    return None
 
 
 def _threshold_keyboard(data: dict) -> InlineKeyboardMarkup:
