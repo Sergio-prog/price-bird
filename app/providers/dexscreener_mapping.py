@@ -49,7 +49,27 @@ def best_pair(pairs: list[dict[str, Any]], chain: str, address: str) -> dict[str
     ]
     if not matching:
         return None
-    return max(matching, key=lambda pair: float((pair.get("liquidity") or {}).get("usd") or 0))
+    return max(matching, key=pair_liquidity)
+
+
+def pair_by_address(pairs: list[dict[str, Any]], chain: str, pair_address: str) -> dict[str, Any] | None:
+    wanted = address_key(pair_address)
+    for pair in pairs:
+        if (
+            pair.get("chainId") == chain
+            and address_key(pair.get("pairAddress") or "") == wanted
+            and pair.get("priceUsd") is not None
+        ):
+            return pair
+    return None
+
+
+def pair_liquidity(pair: dict[str, Any]) -> float:
+    return float((pair.get("liquidity") or {}).get("usd") or 0)
+
+
+def pair_volume(pair: dict[str, Any]) -> float:
+    return float((pair.get("volume") or {}).get("h24") or 0)
 
 
 def quote_from_pair(pair: dict[str, Any], source: str) -> PriceQuote:
@@ -72,6 +92,9 @@ __all__ = [
     "format_pair",
     "format_price",
     "normalize_chain",
+    "pair_by_address",
+    "pair_liquidity",
+    "pair_volume",
     "pairs_from_payload",
     "quote_from_pair",
 ]

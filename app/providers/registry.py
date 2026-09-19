@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import re
 import time
 
 from app.core.config import settings
@@ -7,15 +9,24 @@ from app.db.models import Asset
 from app.providers.base import AssetCandidate, PriceProvider, PriceQuote
 from app.providers.cex import default_cex_provider
 from app.providers.dexscreener import DexScreenerProvider
+from app.providers.hyperliquid import HyperliquidProvider
 from app.providers.opensea import OpenSeaNftProvider
 from app.providers.reservoir import ReservoirNftProvider
 
+logger = logging.getLogger(__name__)
+
 SEARCH_CACHE_MAX_ENTRIES = 1000
+MAX_SEARCH_RESULTS = 30
 
 
 class ProviderRegistry:
     def __init__(self, providers: list[PriceProvider] | None = None, *, search_cache_seconds: int | None = None) -> None:
-        self.providers = providers or [DexScreenerProvider(), default_cex_provider, *_build_nft_providers()]
+        self.providers = providers or [
+            HyperliquidProvider(),
+            default_cex_provider,
+            DexScreenerProvider(),
+            *_build_nft_providers(),
+        ]
         self.search_cache_seconds = settings.search_cache_seconds if search_cache_seconds is None else search_cache_seconds
         self._search_cache: dict[tuple[str, bool], tuple[float, list[AssetCandidate]]] = {}
 
@@ -31,10 +42,12 @@ class ProviderRegistry:
             try:
                 results.extend(await provider.search_assets(query, nft=nft))
             except Exception as exc:
+                logger.warning("Provider search failed; provider=%s nft=%s error=%r", provider.name, nft, exc)
                 errors.append(exc)
                 continue
         if nft and not results and errors:
             raise errors[0]
+        results = rank_candidates(results, query)[:MAX_SEARCH_RESULTS]
         self._remember_search(key, results)
         return results
 
@@ -64,6 +77,15 @@ class ProviderRegistry:
                 if now - entry[0] < self.search_cache_seconds
             }
         self._search_cache[key] = (now, list(results))
+
+
+def rank_candidates(candidates: list[AssetCandidate], query: str) -> list[AssetCandidate]:
+    ticker = query.strip().upper()
+    return sorted(
+        candidates,
+        key=lambda candidate: (re.split(r"[/-]", candidate.symbol.upper())[0] == ticker, candidate.volume_usd),
+        reverse=True,
+    )
 
 
 def _build_nft_providers() -> list[PriceProvider]:

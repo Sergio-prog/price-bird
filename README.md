@@ -66,6 +66,10 @@ instead of banning the server IP. Budgets and the published limits are in
 [`docs/provider-rate-limits.md`](docs/provider-rate-limits.md). Each quote is stored as a snapshot, all active alerts
 for the asset are evaluated, and notifications are queued.
 
+Search merges Hyperliquid (spot and perps), Binance and DexScreener, ranks exact ticker matches by 24h volume and
+collapses DEX pools into one entry per token, which tracks the token's deepest pool. Pasting a pool address tracks
+that pool instead. Pasting an NFT contract address resolves it to its OpenSea collection.
+
 NFT collection floors are provider-backed. OpenSea is the default (`NFT_PROVIDERS=opensea`);
 add `reservoir` only if you have a working Reservoir API.
 OpenSea collection search needs a valid `OPENSEA_API_KEY`; keys expire, and an expired key makes

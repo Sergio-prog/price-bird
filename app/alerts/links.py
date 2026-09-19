@@ -49,6 +49,7 @@ def _link_label(label: str) -> str:
         "dexscreener": "DexScreener",
         "fomo": "Fomo Trade",
         "gmgn": "GMGN",
+        "hyperliquid": "Hyperliquid",
         "opensea": "OpenSea",
         "reservoir": "Reservoir",
         "tradingview": "TradingView",

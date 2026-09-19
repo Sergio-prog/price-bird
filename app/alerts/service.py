@@ -6,7 +6,7 @@ from decimal import Decimal
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.alerts.evaluator import evaluate_alert
-from app.alerts.formatting import format_percent, format_threshold
+from app.alerts.formatting import format_percent, format_threshold, venue_label
 from app.alerts.limits import ensure_alert_capacity
 from app.alerts.parser import ParsedAlertCommand
 from app.db import repositories as repo
@@ -153,5 +153,6 @@ def asset_kind_label(asset: Asset) -> str:
     if asset.type == AssetType.NFT_COLLECTION.value:
         return t("market-nft")
     if asset.type == AssetType.CEX_SYMBOL.value:
-        return t("market-cex")
+        exchange = (asset.extra or {}).get("exchange")
+        return venue_label(exchange) if exchange else t("market-cex")
     return asset.chain or t("market-token")

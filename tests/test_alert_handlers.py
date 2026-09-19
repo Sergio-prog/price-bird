@@ -224,6 +224,25 @@ async def test_wizard_back_from_shortcut_candidates_returns_to_menu(monkeypatch:
 
 
 @pytest.mark.asyncio
+async def test_wizard_source_filter_narrows_candidates_in_place(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(alert_handlers, "Message", FakeEditableMessage)
+    message = FakeEditableMessage()
+    candidates = [
+        {"type": "cex_symbol", "provider": "hyperliquid", "provider_asset_id": "spot:@107", "symbol": "HYPE/USDC"},
+        {"type": "token", "provider": "dexscreener", "provider_asset_id": "solana:abc", "symbol": "HYPE", "chain": "solana"},
+    ]
+    state = FakeState("AlertWizard:waiting_asset", data={"candidates": candidates})
+
+    await alert_handlers.wizard_asset_source(FakeCallback("asset_source:menu", message), state)
+    assert message.edits[-1][0] == t("sources-prompt")
+
+    await alert_handlers.wizard_asset_source(FakeCallback("asset_source:1", message), state)
+
+    assert state.data["asset_venue"] == "solana"
+    assert [row[0].callback_data for row in message.edits[-1][1].inline_keyboard[:2]] == ["asset:1", "asset_source:menu"]
+
+
+@pytest.mark.asyncio
 async def test_wizard_toggle_once_flips_state_and_keyboard(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(alert_handlers, "Message", FakeEditableMessage)
     message = FakeEditableMessage()

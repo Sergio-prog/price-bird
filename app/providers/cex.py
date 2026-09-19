@@ -15,6 +15,7 @@ from app.core.config import settings
 from app.db.enums import AssetType
 from app.db.models import Asset
 from app.providers.base import AssetCandidate, PriceQuote
+from app.utils.parsing import format_price
 from app.utils.ratelimit import ProviderThrottle, RateLimited
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,7 @@ TICKER_BATCH_SIZE = 20
 PRICE_CACHE_SECONDS = 60
 RATE_LIMIT_PAUSE_SECONDS = 60
 BAN_PAUSE_SECONDS = 120
+STABLE_QUOTES = ("USDT", "USDC", "USD")
 
 
 def split_asset_id(provider_asset_id: str) -> tuple[str, str]:
@@ -35,6 +37,14 @@ def ticker_price(ticker: dict[str, Any] | None) -> Decimal | None:
         return None
     price = ticker.get("last") or ticker.get("close")
     return Decimal(str(price)) if price is not None else None
+
+
+def _is_spot(market: dict[str, Any]) -> bool:
+    return market.get("type", "spot") == "spot"
+
+
+def _quote_volume(ticker: dict[str, Any] | None) -> float:
+    return float((ticker or {}).get("quoteVolume") or 0)
 
 
 def ban_pause_seconds(exc: Exception) -> float:
@@ -65,23 +75,39 @@ class CcxtProvider:
         if nft:
             return []
         exchange = await self._exchange(self.exchange_id)
-        needle = query.upper()
-        candidates = []
-        for symbol, market in exchange.markets.items():
-            base = (market.get("base") or "").upper()
-            if needle in {base, symbol.upper()} and market.get("quote") in {"USDT", "USD", "USDC"}:
-                candidates.append(
-                    AssetCandidate(
-                        type=AssetType.CEX_SYMBOL,
-                        provider=self.name,
-                        provider_asset_id=f"{self.exchange_id}:{symbol}",
-                        symbol=symbol,
-                        name=f"{self.exchange_id.upper()} {symbol}",
-                        metadata={"exchange": self.exchange_id},
-                        links={"tradingview": f"https://www.tradingview.com/symbols/{base}USDT/"},
-                    )
-                )
-        return candidates[:10]
+        needle = query.strip().upper()
+        symbols = [
+            symbol
+            for symbol, market in exchange.markets.items()
+            if market.get("quote") in STABLE_QUOTES
+            and market.get("active") is not False
+            and (symbol.upper() == needle or (_is_spot(market) and (market.get("base") or "").upper() == needle))
+        ]
+        if not symbols:
+            return []
+        try:
+            tickers = await self._fetch_tickers(self.exchange_id, symbols)
+        except RateLimited:
+            raise
+        except Exception:
+            logger.exception("CEX search tickers failed; exchange=%s symbols=%s", self.exchange_id, len(symbols))
+            tickers = {}
+
+        exact = next((symbol for symbol in symbols if symbol.upper() == needle), None)
+        best = exact or max(symbols, key=lambda symbol: _quote_volume(tickers.get(symbol)))
+        ticker = tickers.get(best)
+        return [
+            AssetCandidate(
+                type=AssetType.CEX_SYMBOL,
+                provider=self.name,
+                provider_asset_id=f"{self.exchange_id}:{best}",
+                symbol=best,
+                name=f"{self.exchange_id.upper()} {best}",
+                metadata={"exchange": self.exchange_id, "price_usd": format_price(ticker_price(ticker))},
+                links={"tradingview": f"https://www.tradingview.com/symbols/{exchange.markets[best].get('base')}USDT/"},
+                volume_usd=_quote_volume(ticker),
+            )
+        ]
 
     async def get_price(self, asset: Asset) -> PriceQuote:
         exchange_id, symbol = split_asset_id(asset.provider_asset_id)

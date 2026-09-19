@@ -20,9 +20,12 @@ from app.providers.opensea_mapping import (
     slug_variants,
 )
 from app.utils.http import HttpClient
+from app.utils.parsing import is_evm_address
 from app.utils.ratelimit import ProviderThrottle
 
 logger = logging.getLogger(__name__)
+
+CONTRACT_LOOKUP_CHAINS = ("ethereum", "base", "arbitrum", "optimism", "polygon")
 
 
 class OpenSeaNftProvider:
@@ -51,6 +54,8 @@ class OpenSeaNftProvider:
     async def search_assets(self, query: str, *, nft: bool = False) -> list[AssetCandidate]:
         if not nft:
             return []
+        if is_evm_address(query):
+            return await self._lookup_by_contract(query.strip())
 
         configuration_error: ProviderConfigurationError | None = None
         if self.api_key:
@@ -124,6 +129,21 @@ class OpenSeaNftProvider:
             except ValueError:
                 continue
         return candidates
+
+    async def _lookup_by_contract(self, address: str) -> list[AssetCandidate]:
+        for chain in dict.fromkeys([settings.opensea_chain, *CONTRACT_LOOKUP_CHAINS]):
+            contract = await self._get_json(f"/api/v2/chain/{chain}/contract/{address}", params={}, missing_ok=True)
+            slug = (contract or {}).get("collection")
+            if not slug:
+                continue
+            collection = await self._get_json(f"/api/v2/collections/{slug}", params={}, missing_ok=True)
+            if not collection:
+                continue
+            try:
+                return [candidate_from_collection(collection, provider_name=self.name)]
+            except ValueError:
+                continue
+        return []
 
     async def _lookup_by_slug(self, query: str) -> list[AssetCandidate]:
         candidates: list[AssetCandidate] = []

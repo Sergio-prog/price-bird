@@ -45,6 +45,32 @@ async def test_search_assets_maps_opensea_search_results(monkeypatch: pytest.Mon
 
 
 @pytest.mark.asyncio
+async def test_search_resolves_contract_address_to_collection(monkeypatch: pytest.MonkeyPatch) -> None:
+    provider = OpenSeaNftProvider(base_url="https://example.test", api_key="key")
+    address = "0x5Af0D9827E0c53E4799BB226655A1de152A425a5"
+    paths: list[str] = []
+
+    async def fake_get_json(path: str, *, params: dict[str, str], missing_ok: bool = False) -> dict | None:
+        paths.append(path)
+        if path == f"/api/v2/chain/base/contract/{address}":
+            return {"address": address, "chain": "base", "collection": "milady"}
+        if path == "/api/v2/collections/milady":
+            return {"collection": "milady", "name": "Milady Maker"}
+        return None
+
+    monkeypatch.setattr(provider, "_get_json", fake_get_json)
+
+    candidates = await provider.search_assets(address, nft=True)
+
+    assert paths == [
+        f"/api/v2/chain/ethereum/contract/{address}",
+        f"/api/v2/chain/base/contract/{address}",
+        "/api/v2/collections/milady",
+    ]
+    assert [candidate.provider_asset_id for candidate in candidates] == ["milady"]
+
+
+@pytest.mark.asyncio
 async def test_search_falls_back_to_slug_lookup_when_key_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     provider = OpenSeaNftProvider(base_url="https://example.test", api_key="expired")
 
