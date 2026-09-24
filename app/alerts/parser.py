@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 from app.db.enums import AlertDirection, AlertType, AssetType
 from app.i18n import LocalizedError
-from app.utils.amounts import parse_amount
+from app.utils.amounts import parse_amount, parse_percent, split_market_cap_suffix
 
-_PERCENT_RE = re.compile(r"^(?P<value>\d+(?:\.\d+)?)%$")
+PERCENT_DIRECTIONS = {None: AlertDirection.BOTH, "+": AlertDirection.UP, "-": AlertDirection.DOWN}
 _THRESHOLD_RE = re.compile(r"^(?P<op>[<>])\s*(?P<amount>.+)$")
 
 
@@ -47,37 +47,34 @@ def parse_alert_command(text: str) -> ParsedAlertCommand:
         raise LocalizedError("error-alert-missing-parts")
 
     condition = " ".join(condition_parts).strip()
-    percent_match = _PERCENT_RE.match(condition)
-    if percent_match:
+    if condition.endswith("%"):
+        value, sign = parse_percent(condition)
         return ParsedAlertCommand(
             query=query,
             asset_type_hint=asset_type_hint,
             alert_type=AlertType.PERCENT_CHANGE,
-            threshold_value=_decimal(percent_match.group("value")),
-            direction=AlertDirection.BOTH,
+            threshold_value=value,
+            direction=PERCENT_DIRECTIONS[sign],
         )
 
     threshold_match = _THRESHOLD_RE.match(condition)
     if threshold_match:
-        op = threshold_match.group("op")
-        value, currency = parse_amount(threshold_match.group("amount"))
+        above = threshold_match.group("op") == ">"
+        amount, market_cap = split_market_cap_suffix(threshold_match.group("amount"))
+        value, currency = parse_amount(amount)
         return ParsedAlertCommand(
             query=query,
             asset_type_hint=asset_type_hint,
-            alert_type=AlertType.PRICE_ABOVE if op == ">" else AlertType.PRICE_BELOW,
+            alert_type=threshold_alert_type(above=above, market_cap=market_cap),
             threshold_value=value,
-            direction=AlertDirection.UP if op == ">" else AlertDirection.DOWN,
+            direction=AlertDirection.UP if above else AlertDirection.DOWN,
             threshold_currency=currency,
         )
 
     raise LocalizedError("error-alert-condition")
 
 
-def _decimal(value: str) -> Decimal:
-    try:
-        parsed = Decimal(value)
-    except InvalidOperation as exc:
-        raise LocalizedError("error-invalid-number", value=value) from exc
-    if parsed <= 0:
-        raise LocalizedError("error-amount-not-positive")
-    return parsed
+def threshold_alert_type(*, above: bool, market_cap: bool) -> AlertType:
+    if market_cap:
+        return AlertType.MCAP_ABOVE if above else AlertType.MCAP_BELOW
+    return AlertType.PRICE_ABOVE if above else AlertType.PRICE_BELOW

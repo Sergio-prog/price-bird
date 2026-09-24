@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import re
 from html import escape
 from urllib.parse import quote_plus
 
+from app.alerts.icons import icon, with_icon
 from app.db.enums import AssetType
 from app.db.models import Asset
 
@@ -22,7 +24,8 @@ def build_asset_links(asset: Asset) -> dict[str, str]:
     links = {link.kind: link.url for link in asset.links}
 
     if "tradingview" not in links:
-        links["tradingview"] = f"https://www.tradingview.com/search/?query={quote_plus(asset.symbol)}"
+        query = re.sub(r"-PERP$|/", "", asset.symbol) if asset.type == AssetType.CEX_SYMBOL else asset.symbol
+        links["tradingview"] = f"https://www.tradingview.com/search/?query={quote_plus(query)}"
 
     if asset.contract_address and asset.chain and asset.type != AssetType.NFT_COLLECTION:
         chain = asset.chain.lower()
@@ -41,7 +44,10 @@ def build_asset_links(asset: Asset) -> dict[str, str]:
 def format_links(links: dict[str, str]) -> str:
     if not links:
         return ""
-    return " | ".join(f'<a href="{escape(url, quote=True)}">{escape(_link_label(label))}</a>' for label, url in links.items())
+    return " | ".join(
+        with_icon(icon(label), f'<a href="{escape(url, quote=True)}">{escape(_link_label(label))}</a>')
+        for label, url in links.items()
+    )
 
 
 def _link_label(label: str) -> str:

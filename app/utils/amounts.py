@@ -6,14 +6,20 @@ from decimal import Decimal, InvalidOperation
 from app.i18n import LocalizedError
 from app.utils.currency import USD_ALIASES, canonical_symbol
 
-_MULTIPLIERS = {"k": Decimal("1e3"), "m": Decimal("1e6"), "b": Decimal("1e9")}
+_MULTIPLIERS = {"k": Decimal("1e3"), "m": Decimal("1e6"), "b": Decimal("1e9"), "t": Decimal("1e12")}
+_EXPONENT = r"(?:e[-+]?\d+)?"
 _AMOUNT_RE = re.compile(
-    r"^(?P<lead>\$)?\s*(?P<number>\d[\d,]*(?:\.\d+)?|\.\d+)\s*(?P<mult>[kmb](?![a-z]))?\s*(?P<unit>\$|[a-z]{2,10})?$"
+    rf"^(?P<lead>\$)?\s*(?P<number>\d[\d,]*(?:\.\d+)?{_EXPONENT}|\.\d+{_EXPONENT})\s*"
+    r"(?P<mult>[kmbt](?![a-z]))?\s*(?P<unit>\$|[a-z]{2,10})?$"
 )
+_PERCENT_RE = re.compile(rf"^(?P<sign>[-+])?\s*(?P<number>\d+(?:\.\d+)?{_EXPONENT}|\.\d+{_EXPONENT})\s*%?$")
+_SUBSCRIPT_ZEROS_RE = re.compile(r"\.0(?:(?P<subscript>[₀₁₂₃₄₅₆₇₈₉]+)|\{(?P<braces>\d+)\})")
+_SUBSCRIPT_DIGITS = str.maketrans("₀₁₂₃₄₅₆₇₈₉", "0123456789")
+_MARKET_CAP_SUFFIX_RE = re.compile(r"^(?P<amount>.+?)\s*(?:mc|mcap)$", re.IGNORECASE)
 
 
 def parse_amount(text: str) -> tuple[Decimal, str | None]:
-    match = _AMOUNT_RE.match(text.strip().lower())
+    match = _AMOUNT_RE.match(expand_zero_count(text.strip().lower()))
     if not match:
         raise LocalizedError("error-amount-format")
     if match.group("lead") and match.group("unit"):
@@ -32,6 +38,31 @@ def parse_amount(text: str) -> tuple[Decimal, str | None]:
     if unit in USD_ALIASES:
         return value, "USD"
     return value, canonical_symbol(unit)
+
+
+def parse_percent(text: str) -> tuple[Decimal, str | None]:
+    match = _PERCENT_RE.match(text.strip().lower())
+    if not match:
+        raise LocalizedError("error-percent-format")
+    value = Decimal(match.group("number"))
+    if value <= 0 or not value.is_finite():
+        raise LocalizedError("error-amount-not-positive")
+    return value, match.group("sign")
+
+
+def split_market_cap_suffix(text: str) -> tuple[str, bool]:
+    match = _MARKET_CAP_SUFFIX_RE.match(text.strip())
+    if match is None:
+        return text.strip(), False
+    return match.group("amount").strip(), True
+
+
+def expand_zero_count(text: str) -> str:
+    def expand(match: re.Match[str]) -> str:
+        count = (match.group("subscript") or "").translate(_SUBSCRIPT_DIGITS) or match.group("braces")
+        return "." + "0" * int(count)
+
+    return _SUBSCRIPT_ZEROS_RE.sub(expand, text)
 
 
 def resolve_currency(unit: str | None, *, default: str, native_symbol: str | None) -> str:

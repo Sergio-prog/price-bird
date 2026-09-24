@@ -46,7 +46,11 @@ class ConnectionWizard(StatesGroup):
 
 
 def keyboard(rows):
-    return Markup(inline_keyboard=[[Button(text=text, callback_data=data) for text, data in row] for row in rows])
+    return Markup(inline_keyboard=[[_button(*item) for item in row] for row in rows])
+
+
+def _button(text: str, data: str, style: str | None = None) -> Button:
+    return Button(text=text, callback_data=data, style=style)
 
 
 async def owned_user(session, telegram_id):

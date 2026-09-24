@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.alerts.links import build_asset_links
+from app.db.enums import AssetType
 from app.db.models import Alert, AlertEvent, Asset, ConnectedApp, Delivery
 from app.integrations.access import can_use_connection
 from app.integrations.catalog import TRENCHBOOK_SLUG
@@ -18,6 +19,8 @@ async def queue_event(session: AsyncSession, event: AlertEvent, alert: Alert, as
     event.notification_status = "routed"
     available_links = build_asset_links(asset)
     preferred_link = coin_link_key(getattr(alert.user, "coin_link", None))
+    if preferred_link not in available_links and asset.type != AssetType.NFT_COLLECTION.value:
+        preferred_link = "tradingview"
     selected_links = {}
     for name in (quote.source, preferred_link):
         url = available_links.get(name)
@@ -32,7 +35,14 @@ async def queue_event(session: AsyncSession, event: AlertEvent, alert: Alert, as
         "note": alert.note,
         "links": selected_links,
         "recipient_telegram_id": str(alert.user.telegram_id),
-        "asset": {"symbol": asset.symbol, "kind": asset.type, "chain": asset.chain, "address": asset.contract_address},
+        "asset": {
+            "symbol": asset.symbol,
+            "kind": asset.type,
+            "chain": asset.chain,
+            "address": asset.contract_address,
+            "exchange": (asset.extra or {}).get("exchange"),
+            "dex": (asset.extra or {}).get("dex_id"),
+        },
         "rule": {
             "type": alert.type,
             "threshold": str(alert.threshold_value),

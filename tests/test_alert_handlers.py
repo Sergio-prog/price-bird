@@ -1,3 +1,4 @@
+from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
@@ -11,7 +12,7 @@ from app.bot.messages import (
     start_message,
 )
 from app.i18n import t
-from app.providers.base import ProviderConfigurationError
+from app.providers.base import AssetCandidate, ProviderConfigurationError
 
 
 class FakeMessage:
@@ -192,11 +193,18 @@ class FakeEditableMessage(FakeMessage):
 async def test_wizard_back_returns_to_previous_step(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(alert_handlers, "Message", FakeEditableMessage)
     message = FakeEditableMessage()
-    state = FakeState("AlertWizard:waiting_threshold", data={"alert_type": "above", "candidates": []})
+    candidates = [
+        {"type": "token", "provider": "dexscreener", "provider_asset_id": "solana:a", "symbol": "BONK", "chain": "solana"},
+        {"type": "token", "provider": "dexscreener", "provider_asset_id": "base:b", "symbol": "BONK", "chain": "base"},
+    ]
+    state = FakeState(
+        "AlertWizard:waiting_threshold",
+        data={"alert_type": "above", "candidates": candidates, "selected_candidate": candidates[0]},
+    )
 
     await alert_handlers.wizard_back_to_type(FakeCallback("wizard:back", message), state)
     assert state.state == alert_handlers.AlertWizard.waiting_type
-    assert message.edits[-1][0] == t("alert-type-prompt")
+    assert "<b>BONK - solana</b>" in message.edits[-1][0]
 
     await alert_handlers.wizard_back_to_candidates(FakeCallback("wizard:back", message), state)
     assert state.state == alert_handlers.AlertWizard.waiting_asset
@@ -246,14 +254,53 @@ async def test_wizard_source_filter_narrows_candidates_in_place(monkeypatch: pyt
 async def test_wizard_toggle_once_flips_state_and_keyboard(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(alert_handlers, "Message", FakeEditableMessage)
     message = FakeEditableMessage()
-    state = FakeState("AlertWizard:waiting_threshold", data={"alert_type": "mcap_above", "one_time": True})
+    state = FakeState("AlertWizard:waiting_threshold", data={"alert_type": "above", "one_time": True})
 
     await alert_handlers.wizard_toggle_once(FakeCallback("threshold:toggle_once", message), state)
 
     assert state.data["one_time"] is False
-    assert message.edits[-1][1].inline_keyboard[0][0].text == "One time: ❌"
-    assert alert_handlers._wizard_repeat(state.data) is True
-    assert alert_handlers._wizard_repeat({"alert_type": "percent"}) is None
+    options = message.edits[-1][1].inline_keyboard[0]
+    assert options[0].text == "One time: ❌"
+    assert options[1].callback_data == "threshold:cooldown"
+
+
+@pytest.mark.asyncio
+async def test_wizard_query_selects_the_only_match(monkeypatch: pytest.MonkeyPatch) -> None:
+    message = FakeMessage(text="So11111111111111111111111111111111111111112")
+    state = FakeState("AlertWizard:waiting_query")
+    candidate = AssetCandidate(
+        type=alert_handlers.AssetType.TOKEN,
+        provider="dexscreener",
+        provider_asset_id="solana:So11111111111111111111111111111111111111112",
+        symbol="SOL",
+        name="Wrapped SOL",
+        chain="solana",
+    )
+
+    async def fake_ensure_access(message, session) -> bool:
+        return True
+
+    async def fake_search_assets(query: str, *, nft: bool) -> list:
+        return [candidate]
+
+    monkeypatch.setattr(alert_handlers, "ensure_access", fake_ensure_access)
+    monkeypatch.setattr(alert_handlers.provider_registry, "search_assets", fake_search_assets)
+
+    await alert_handlers.wizard_query(message, state, object())
+
+    assert state.state == alert_handlers.AlertWizard.waiting_type
+    assert "Wrapped SOL - solana" in message.answers[-1][0]
+    assert message.answers[-1][1].inline_keyboard[0][0].callback_data == "alert_type:percent"
+
+
+def test_parsed_threshold_merges_market_cap_mode_into_breakouts() -> None:
+    parsed = alert_handlers._parsed_threshold({"alert_type": "below", "metric": "mcap"}, Decimal("17000000"))
+    assert parsed.alert_type == alert_handlers.AlertType.MCAP_BELOW
+    assert parsed.direction == alert_handlers.AlertDirection.DOWN
+
+    parsed = alert_handlers._parsed_threshold({"alert_type": "percent", "direction": "up"}, Decimal("5"))
+    assert parsed.alert_type == alert_handlers.AlertType.PERCENT_CHANGE
+    assert parsed.direction == alert_handlers.AlertDirection.UP
 
 
 def test_alerts_message_without_alerts_offers_only_menu() -> None:

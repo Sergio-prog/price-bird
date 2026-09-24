@@ -2,7 +2,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.utils.amounts import parse_amount, resolve_currency
+from app.utils.amounts import parse_amount, parse_percent, resolve_currency, split_market_cap_suffix
 from app.utils.currency import canonical_symbol, chain_native_symbol, native_symbol_or_none
 
 
@@ -22,6 +22,11 @@ from app.utils.currency import canonical_symbol, chain_native_symbol, native_sym
         ("0.5 weth", (Decimal("0.5"), "ETH")),
         ("2k SOL", (Decimal("2000"), "SOL")),
         ("15 usdc", (Decimal("15"), "USD")),
+        ("1e-18", (Decimal("1e-18"), None)),
+        ("$2.5E-7", (Decimal("2.5e-7"), "USD")),
+        ("0.0₄5", (Decimal("0.00005"), None)),
+        ("0.0{5}123 sol", (Decimal("0.00000123"), "SOL")),
+        ("1.2t", (Decimal("1200000000000"), None)),
     ],
 )
 def test_parse_amount(text: str, expected: tuple) -> None:
@@ -32,6 +37,32 @@ def test_parse_amount(text: str, expected: tuple) -> None:
 def test_parse_amount_rejects_invalid(text: str) -> None:
     with pytest.raises(ValueError):
         parse_amount(text)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("10", (Decimal("10"), None)),
+        ("2.5%", (Decimal("2.5"), None)),
+        ("+5%", (Decimal("5"), "+")),
+        ("- 7 %", (Decimal("7"), "-")),
+    ],
+)
+def test_parse_percent(text: str, expected: tuple) -> None:
+    assert parse_percent(text) == expected
+
+
+@pytest.mark.parametrize("text", ["", "0%", "ten", "5$", "++5%"])
+def test_parse_percent_rejects_invalid(text: str) -> None:
+    with pytest.raises(ValueError):
+        parse_percent(text)
+
+
+def test_split_market_cap_suffix() -> None:
+    assert split_market_cap_suffix("17m mc") == ("17m", True)
+    assert split_market_cap_suffix("17mMC") == ("17m", True)
+    assert split_market_cap_suffix("1.2 ETH mcap") == ("1.2 ETH", True)
+    assert split_market_cap_suffix("17m") == ("17m", False)
 
 
 def test_resolve_currency() -> None:

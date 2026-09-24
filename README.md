@@ -63,12 +63,12 @@ groups them by provider and fetches prices in batches: one Binance ticker call c
 call covers 30 tokens. NFT floors refresh every `NFT_REFRESH_INTERVAL_SECONDS` instead. Each provider runs behind
 a client-side token bucket and pauses itself on 429/418 responses, so a rate limit delays that provider's alerts
 instead of banning the server IP. Budgets and the published limits are in
-[`docs/provider-rate-limits.md`](docs/provider-rate-limits.md). Each quote is stored as a snapshot, all active alerts
-for the asset are evaluated, and notifications are queued.
+[`docs/provider-rate-limits.md`](docs/provider-rate-limits.md). All active alerts for the asset are evaluated against
+each quote; a price snapshot is stored only when an alert triggers, and notifications are queued.
 
-Search merges Hyperliquid (spot and perps), Binance and DexScreener, ranks exact ticker matches by 24h volume and
+Search queries Hyperliquid (spot and perps), Binance and DexScreener in parallel, ranks exact ticker matches by 24h volume and
 collapses DEX pools into one entry per token, which tracks the token's deepest pool. Pasting a pool address tracks
-that pool instead. Pasting an NFT contract address resolves it to its OpenSea collection.
+that pool instead. A single match is selected without showing the list. Pasting an NFT contract address resolves it to its OpenSea collection.
 
 NFT collection floors are provider-backed. OpenSea is the default (`NFT_PROVIDERS=opensea`);
 add `reservoir` only if you have a working Reservoir API.
@@ -93,7 +93,7 @@ The bot speaks English, Ukrainian and Russian. It uses the language picked in `/
 
 Limits live in Postgres and apply per alert kind: `token` covers DEX tokens and CEX pairs, `nft` covers NFT collections. Active and paused alerts count toward them.
 
-`alert_limits` has one row per kind. The migration seeds these values from provider rate limits at the 45-second refresh interval:
+`alert_limits` has one row per kind. The migration seeds these values from provider rate limits at the old 45-second refresh interval; batching keeps them within budget at the 10-second default:
 
 | Column | token | nft | Meaning |
 |---|---|---|---|
@@ -119,7 +119,11 @@ Built-in integrations and custom webhooks are admin-only by default. Set `PUBLIC
 
 Registration remains allowlist-only while `PUBLIC_ACCESS_ENABLED=false`. Set it to `true` for public launch. New users and previously pending users become active when they send `/start`; suspended users remain blocked.
 
-Price and market-cap thresholds accept `100k`, `23m`, `1b` shortcuts and an optional unit (`$0.023`, `1.2 ETH`).
+Price and market-cap thresholds accept `100k`, `23m`, `1b`, `1t` shortcuts, scientific notation (`1e-6`), DexScreener-style zero counts (`0.0₄5` or `0.0{4}5` = `0.00005`) and an optional unit (`$0.023`, `1.2 ETH`).
+Breakout alerts watch price by default; add `mc` (`> 17m mc`) or pick Market cap in the wizard to watch market cap instead.
+Percent alerts accept `+5%` for pumps only and `-5%` for dumps only. New alerts use a 1-minute cooldown; the wizard cycles 1m, 5m, 15m and 1h.
+
+Messages show chain and DEX logos as Telegram custom emoji from the BasedBot logo packs. Telegram renders them only when the bot owner has Telegram Premium; otherwise the plain emoji fallback is shown. Set `CUSTOM_EMOJI_ENABLED=false` to always send the plain emoji.
 Assets quoted in a native currency (NFT floors, DEX pairs against ETH/SOL/BNB) can use that currency instead of USD;
 NFT floor thresholds default to the native currency, everything else defaults to USD.
 

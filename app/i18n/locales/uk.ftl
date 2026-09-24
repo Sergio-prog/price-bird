@@ -37,21 +37,23 @@ start =
     📣 <a href="{ $channel_url }">Канал</a>
 help-title = <b>Доступні команди</b>
 examples =
-    <b>Приклади</b>
+    <b>📚 Приклади</b>
 
-    <b>Швидка команда</b>
-    <code>/alert BTC 10%</code>
+    <b>⚡ Швидка команда</b>
+    <code>/alert BTC 10%</code> - зміна вгору чи вниз
+    <code>/alert SOL +5%</code> - лише ріст
+    <code>/alert PEPE -15%</code> - лише падіння
     <code>/alert ETH &gt; 4000</code>
-    <code>/alert SOL &lt; 120</code>
-    <code>/alert PEPE 15%</code>
     <code>/alert BTC/USDT &lt; 90000</code>
+    <code>/alert BONK &lt; 0.0₄5</code>
+    <code>/alert PEPE &gt; 5b mc</code> - капіталізація
 
-    <b>Флори NFT</b>
+    <b>🖼 Флори NFT</b>
     <code>/alert milady floor 10%</code>
     <code>/alert pudgy penguins floor 15%</code>
     <code>/alert boredapeyachtclub floor &lt; 8</code>
 
-    <b>Покроково</b>
+    <b>🧭 Покроково</b>
     Використовуй <code>/newalert</code>, якщо пошук знайшов забагато варіантів або хочеш кнопки.
 
 ## Access
@@ -74,6 +76,7 @@ button-back-to-menu = ↩️ До меню
 button-menu = 🏠 Меню
 button-add-another = ➕ Додати ще
 button-edit-alert = ✏️ Редагувати алерт
+button-alert-settings = ⚙️ Налаштування алерту
 
 ## Alert wizard
 
@@ -92,35 +95,44 @@ candidates-prompt = Вибери актив для відстеження. Сп�
 sources-prompt = Показати результати з:
 source-all = Усі
 button-source-filter = 🔀 Джерело: { $source }
-alert-type-prompt = Обери, коли має спрацювати алерт:
+alert-type-prompt =
+    { $asset }
+
+    Обери, коли має спрацювати алерт:
 alert-type-percent = 📈 Зміна % вгору/вниз
 alert-type-above = 🚀 Пробиває вище
 alert-type-below = 🩸 Падає нижче
-alert-type-mcap-above = Капіталізація вище
-alert-type-mcap-below = Капіталізація нижче
 threshold-percent =
-    <b>{ $asset }</b>
+    { $asset }
 
-    Введи % зміни ціни для сповіщень:
+    📈 Надішли % зміни, на який має спрацювати алерт, напр. <code>10</code>.
+    <code>+5%</code> стежить лише за ростом, <code>-5%</code> лише за падінням.
 threshold-above =
-    <b>{ $asset }</b>
+    { $asset }
 
-    Введи ціну в { $currency }, при пробитті якої вгору спрацює алерт:
+    🚀 Надішли ціну в { $currency }, при пробитті якої вгору спрацює алерт:
     { $hint }
 threshold-below =
-    <b>{ $asset }</b>
+    { $asset }
 
-    Введи ціну в { $currency }, при падінні нижче якої спрацює алерт:
+    🩸 Надішли ціну в { $currency }, при падінні нижче якої спрацює алерт:
     { $hint }
-threshold-mcap =
-    <b>{ $asset }</b>
+threshold-mcap-above =
+    { $asset }
 
-    Введи фактичну капіталізацію в { $currency }. FDV не використовується.
-    Одноразовий: алерт видаляється після першого спрацювання. Інакше він перезаряджається і повторюється.
+    🚀 Надішли капіталізацію в { $currency }, при пробитті якої вгору спрацює алерт. FDV не використовується.
     { $hint }
-threshold-unit-hint = Скорочення: 100k, 23m, 1b. Додай одиницю, щоб змінити валюту, напр. <code>$0.023</code>.
-threshold-unit-hint-native = Скорочення: 100k, 23m, 1b. Додай одиницю, щоб змінити валюту, напр. <code>$0.023</code> або <code>1.2 { $symbol }</code>.
+threshold-mcap-below =
+    { $asset }
+
+    🩸 Надішли капіталізацію в { $currency }, при падінні нижче якої спрацює алерт. FDV не використовується.
+    { $hint }
+threshold-unit-hint = 💡 Скорочення: 100k, 23m, 1b, 1e-6, 0.0₄5. Додай одиницю, щоб змінити валюту, напр. <code>$0.023</code>.
+threshold-unit-hint-native = 💡 Скорочення: 100k, 23m, 1b, 1e-6, 0.0₄5. Додай одиницю, щоб змінити валюту, напр. <code>$0.023</code> або <code>1.2 { $symbol }</code>.
+threshold-mcap-hint = 📊 Додай <code>mc</code> для капіталізації, напр. <code>17m mc</code>.
 button-default-percent = За замовчуванням (10%)
+button-metric-price = 💲 Ціна
+button-metric-mcap = 📊 Капіталізація
 button-currency = Валюта: { $currency }
 button-one-time = Одноразовий: { $state }
 usd-only = Цей актив оцінюється лише в USD.
@@ -131,13 +143,15 @@ alert-create-failed = Не вдалося створити алерт: { $reason
 alert-created =
     ✅ <b>{ $symbol }</b> тепер у твоєму списку відстеження.
 
-    Умова: { $condition }
-    Базова ціна: { $baseline }
-    Ринок: { $market }
-    Режим: { $mode }
+    🎯 Умова: { $condition }
+    📍 Базова ціна: { $baseline }
+    🏦 Ринок: { $market }
+    🔁 Режим: { $mode }
 mode-repeat = повторюваний
 mode-one-time = одноразовий
-condition-percent = Зміна { $threshold } вгору чи вниз
+condition-percent-both = Зміна { $threshold } вгору чи вниз
+condition-percent-up = Зміна { $threshold } вгору
+condition-percent-down = Зміна { $threshold } вниз
 condition-price-above = Ціна вище { $threshold }
 condition-price-below = Ціна нижче { $threshold }
 condition-mcap-above = Капіталізація вище { $threshold }
@@ -180,7 +194,9 @@ market-cap-short = Кап.
 
 ## Alert descriptions
 
-describe-percent = { $symbol }: зміна { $threshold } вгору чи вниз
+describe-percent-both = { $symbol }: зміна { $threshold } вгору чи вниз
+describe-percent-up = { $symbol }: зміна { $threshold } вгору
+describe-percent-down = { $symbol }: зміна { $threshold } вниз
 describe-price-above = { $symbol } вище { $threshold }
 describe-price-below = { $symbol } нижче { $threshold }
 describe-mcap-above = { $symbol }: капіталізація вище { $threshold }
@@ -200,15 +216,15 @@ alert-not-found = Алерт не знайдено.
 alert-not-editable = Алерт більше не можна редагувати.
 alert-deleted-toast = Видалено
 clear-expiry-before-resume = Прибери термін дії перед відновленням.
-field-market = Ринок: { $value }
+field-market = 🏦 Ринок: { $value }
 field-status = Статус: { $value }
-field-mode = Режим: { $value }
-field-threshold = Поріг: { $value }
-field-baseline = Базова ціна: { $value }
-field-cooldown = Кулдаун: { $value }
-field-direction = Напрямок: { $value }
-field-expires = Термін дії: { $value }
-field-note = Нотатка: { $value }
+field-mode = 🔁 Режим: { $value }
+field-threshold = 🎯 Поріг: { $value }
+field-baseline = 📍 Базова ціна: { $value }
+field-cooldown = ⏱ Кулдаун: { $value }
+field-direction = ↕️ Напрямок: { $value }
+field-expires = ⏳ Термін дії: { $value }
+field-note = 📝 Нотатка: { $value }
 status-active = ▶️ активний
 status-paused = ⏸ на паузі
 note-none = немає
@@ -231,7 +247,7 @@ expiry-expired = завершився
 expiry-in = через { $duration }
 expiry-at = { $date } (через { $duration })
 prompt-note = Надішли нотатку, до 300 символів. Надішли -, щоб очистити.
-prompt-cooldown = Надішли кулдаун, напр. 15m, 2h або 1d. Поточний: { $current }
+prompt-cooldown = Надішли кулдаун, напр. 10s, 1m, 15m або 2h. Поточний: { $current }
 prompt-expiry = Надішли термін дії, напр. 24h, 2d, 3mo або 1y. Надішли -, щоб не обмежувати. Поточний: { $current }
 prompt-threshold-percent = Надішли новий поріг у %. Поточний: { $current }
 prompt-threshold-price = Надішли нову ціну в { $units }. Поточна: { $current }
@@ -244,19 +260,19 @@ units-native = USD або { $symbol } (напр. $0.023, 23m, 1.2 { $symbol })
 error-positive-number = Надішли коректне додатне число.
 error-threshold-format = Надішли додатне скінченне число з не більше ніж 36 знаками після коми.
 error-threshold-range = Поріг має бути додатним, скінченним і мати не більше 36 знаків після коми.
-error-amount-format = Надішли число, напр. 0.023, 100k, 23m, 1b, за бажанням з одиницею: $0.023, 1.2 ETH.
+error-amount-format = Надішли число, напр. 0.023, 100k, 23m, 1b, 1e-6 чи 0.0₄5, за бажанням з одиницею: $0.023, 1.2 ETH.
 error-amount-not-positive = Значення має бути додатним числом.
-error-invalid-number = Некоректне число: { $value }
+error-percent-format = Надішли відсоток, напр. 10, 2.5%, +5% чи -5%.
 error-currency-usd = Цей актив оцінюється в USD, а не в { $unit }.
 error-currency-native = Цей актив оцінюється в USD або { $symbol }, а не в { $unit }.
 error-duration-format = Використай число з одиницею: 15m, 24h, 2d, 5w, 3mo, 1y (також 15 min, 5 years).
 error-duration-not-positive = Тривалість має бути додатною.
-error-duration-too-short = Використай щонайменше 1 хвилину.
+error-duration-too-short = Використай щонайменше { $min }.
 error-duration-too-long = Використай щонайбільше { $max }.
 error-note-length = Використай від 1 до 300 символів або -, щоб очистити нотатку.
-error-alert-usage = Використання: /alert BTC 10% або /alert ETH > 70000
+error-alert-usage = Використання: /alert BTC 10%, /alert SOL +5% або /alert ETH > 70000
 error-alert-missing-parts = Бракує запиту активу або умови алерту.
-error-alert-condition = Умова має бути відсотком, напр. 10%, або порогом, напр. > 70000, > 100k чи < 0.8 ETH.
+error-alert-condition = Умова має бути відсотком, напр. 10%, +5% чи -5%, або порогом, напр. > 70000, < 0.8 ETH чи > 17m mc.
 error-no-price = Немає доступної коректної ціни.
 error-mcap-unavailable = Фактична капіталізація недоступна для цього активу.
 error-url-https = Використай HTTPS URL на порту 443.
@@ -342,13 +358,14 @@ button-disconnect = Відключити
 ## Notifications
 
 notification-test = Тестове підключення Price Bird. Жоден алерт не спрацював.
-notification-rule = <b>Правило:</b> { $rule }
-notification-price = <b>Ціна:</b> { $price }
-notification-floor = <b>Флор:</b> { $native } { $symbol } ({ $usd })
-notification-market-cap = <b>Капіталізація:</b> { $value }
-notification-source = <b>Джерело:</b> { $source }
-notification-links = <b>Посилання:</b> { $links }
-notification-note = <b>Нотатка:</b> { $note }
+notification-rule = 🎯 <b>Правило:</b> { $rule }
+notification-price = 💵 <b>Ціна:</b> { $price }
+notification-floor = 🖼 <b>Флор:</b> { $native } { $symbol } ({ $usd })
+notification-market-cap = 📊 <b>Капіталізація:</b> { $value }
+notification-dex = 🏦 <b>DEX:</b> { $dex }
+notification-source = 🛰 <b>Джерело:</b> { $source }
+notification-links = 🔗 <b>Посилання:</b> { $links }
+notification-note = 📝 <b>Нотатка:</b> { $note }
 rule-percent-both = Зміна { $threshold } вгору чи вниз
 rule-percent-up = Зміна { $threshold } вгору
 rule-percent-down = Зміна { $threshold } вниз

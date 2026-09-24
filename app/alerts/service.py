@@ -20,6 +20,9 @@ from app.utils.amounts import resolve_currency
 from app.utils.currency import canonical_symbol
 
 MOVE_ALERT_TYPES = {AlertType.PERCENT_CHANGE.value, AlertType.ABSOLUTE_CHANGE.value}
+MIN_COOLDOWN_SECONDS = 10
+DEFAULT_COOLDOWN_SECONDS = MIN_COOLDOWN_SECONDS
+COOLDOWN_PRESETS = (10, 60, 300, 900, 3600)
 
 
 async def create_alert_from_command(
@@ -29,6 +32,7 @@ async def create_alert_from_command(
     parsed: ParsedAlertCommand,
     selected_asset: Asset,
     repeat: bool | None = None,
+    cooldown_seconds: int | None = None,
 ) -> Alert:
     if (
         not parsed.threshold_value.is_finite()
@@ -65,6 +69,7 @@ async def create_alert_from_command(
         direction=parsed.direction.value,
         repeat=repeat,
         threshold_currency=threshold_currency,
+        cooldown_seconds=cooldown_seconds or DEFAULT_COOLDOWN_SECONDS,
     )
 
 
@@ -84,15 +89,7 @@ async def refresh_and_evaluate_asset(session: AsyncSession, asset: Asset) -> lis
 async def evaluate_asset_quote(session: AsyncSession, asset: Asset, quote: PriceQuote) -> list[int]:
     if not quote.price_usd.is_finite() or quote.price_usd <= 0:
         raise ValueError("No valid price available")
-    snapshot = await repo.create_snapshot(
-        session,
-        asset_id=asset.id,
-        price_usd=quote.price_usd,
-        price_native=quote.price_native,
-        native_symbol=quote.native_symbol,
-        source=quote.source,
-        raw=quote.raw,
-    )
+    snapshot = None
     event_ids: list[int] = []
     for alert in await repo.active_alerts_for_asset(session, asset.id):
         if alert.expires_at is not None and alert.expires_at <= datetime.now(UTC):
@@ -113,6 +110,16 @@ async def evaluate_asset_quote(session: AsyncSession, asset: Asset, quote: Price
             alert.last_triggered_at is not None and (at - alert.last_triggered_at).total_seconds() < alert.cooldown_seconds
         ):
             continue
+        if snapshot is None:
+            snapshot = await repo.create_snapshot(
+                session,
+                asset_id=asset.id,
+                price_usd=quote.price_usd,
+                price_native=quote.price_native,
+                native_symbol=quote.native_symbol,
+                source=quote.source,
+                raw=quote.raw,
+            )
         event = await repo.create_alert_event(
             session,
             alert_id=alert.id,
@@ -134,7 +141,8 @@ async def evaluate_asset_quote(session: AsyncSession, asset: Asset, quote: Price
 def describe_alert(alert: Alert) -> str:
     symbol = alert.asset.symbol if alert.asset else t("asset-fallback")
     if alert.type == AlertType.PERCENT_CHANGE.value:
-        return t("describe-percent", symbol=symbol, threshold=format_percent(alert.threshold_value))
+        direction = alert.direction if alert.direction in {"up", "down"} else "both"
+        return t(f"describe-percent-{direction}", symbol=symbol, threshold=format_percent(alert.threshold_value))
     threshold = format_threshold(alert.type, alert.threshold_value, alert_currency(alert))
     key = {
         AlertType.PRICE_ABOVE.value: "describe-price-above",

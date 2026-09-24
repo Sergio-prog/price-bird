@@ -50,3 +50,17 @@ def test_threshold_with_suffix_and_currency() -> None:
     parsed = parse_alert_command("/alert pudgy penguins > $50000")
     assert parsed.query == "pudgy penguins"
     assert parsed.threshold_currency == "USD"
+
+
+def test_signed_percent_sets_direction() -> None:
+    assert parse_alert_command("/alert SOL +5%").direction == AlertDirection.UP
+    assert parse_alert_command("/alert SOL -5%").direction == AlertDirection.DOWN
+
+
+def test_market_cap_suffix_selects_market_cap_alert() -> None:
+    parsed = parse_alert_command("/alert PEPE > 17m mc")
+
+    assert parsed.query == "PEPE"
+    assert parsed.alert_type == AlertType.MCAP_ABOVE
+    assert parsed.threshold_value == Decimal("17000000")
+    assert parse_alert_command("/alert PEPE < 5b mcap").alert_type == AlertType.MCAP_BELOW

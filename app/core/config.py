@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     )
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
 
-    price_refresh_interval_seconds: int = Field(default=45, alias="PRICE_REFRESH_INTERVAL_SECONDS")
+    price_refresh_interval_seconds: int = Field(default=10, alias="PRICE_REFRESH_INTERVAL_SECONDS")
     provider_timeout_seconds: int = Field(default=10, alias="PROVIDER_TIMEOUT_SECONDS")
     provider_max_attempts: int = Field(default=3, alias="PROVIDER_MAX_ATTEMPTS")
     nft_refresh_interval_seconds: int = Field(default=300, alias="NFT_REFRESH_INTERVAL_SECONDS")
@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     opensea_reads_per_hour: int = Field(default=540, alias="OPENSEA_READS_PER_HOUR")
     notification_max_attempts: int = Field(default=5, alias="NOTIFICATION_MAX_ATTEMPTS")
     integration_secrets_key: str = Field(default="", alias="INTEGRATION_SECRETS_KEY")
+    custom_emoji_enabled: bool = Field(default=True, alias="CUSTOM_EMOJI_ENABLED")
     public_access_enabled: bool = Field(default=False, alias="PUBLIC_ACCESS_ENABLED")
     public_integrations_enabled: bool = Field(default=False, alias="PUBLIC_INTEGRATIONS_ENABLED")
     public_custom_webhooks_enabled: bool = Field(default=False, alias="PUBLIC_CUSTOM_WEBHOOKS_ENABLED")

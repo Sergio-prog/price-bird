@@ -37,21 +37,23 @@ start =
     📣 <a href="{ $channel_url }">Channel</a>
 help-title = <b>Available commands</b>
 examples =
-    <b>Examples</b>
+    <b>📚 Examples</b>
 
-    <b>Fast command</b>
-    <code>/alert BTC 10%</code>
+    <b>⚡ Fast command</b>
+    <code>/alert BTC 10%</code> - moves up or down
+    <code>/alert SOL +5%</code> - pumps only
+    <code>/alert PEPE -15%</code> - dumps only
     <code>/alert ETH &gt; 4000</code>
-    <code>/alert SOL &lt; 120</code>
-    <code>/alert PEPE 15%</code>
     <code>/alert BTC/USDT &lt; 90000</code>
+    <code>/alert BONK &lt; 0.0₄5</code>
+    <code>/alert PEPE &gt; 5b mc</code> - market cap
 
-    <b>NFT floors</b>
+    <b>🖼 NFT floors</b>
     <code>/alert milady floor 10%</code>
     <code>/alert pudgy penguins floor 15%</code>
     <code>/alert boredapeyachtclub floor &lt; 8</code>
 
-    <b>Step by step</b>
+    <b>🧭 Step by step</b>
     Use <code>/newalert</code> when search returns many matches or you want buttons.
 
 ## Access
@@ -74,6 +76,7 @@ button-back-to-menu = ↩️ Back to menu
 button-menu = 🏠 Menu
 button-add-another = ➕ Add another
 button-edit-alert = ✏️ Edit alert
+button-alert-settings = ⚙️ Alert settings
 
 ## Alert wizard
 
@@ -92,35 +95,44 @@ candidates-prompt = Select the asset to watch. Most traded first.
 sources-prompt = Show results from:
 source-all = All
 button-source-filter = 🔀 Source: { $source }
-alert-type-prompt = Choose when this alert should trigger:
+alert-type-prompt =
+    { $asset }
+
+    Choose when this alert should trigger:
 alert-type-percent = 📈 Move % up/down
 alert-type-above = 🚀 Breaks above
 alert-type-below = 🩸 Drops below
-alert-type-mcap-above = Market cap above
-alert-type-mcap-below = Market cap below
 threshold-percent =
-    <b>{ $asset }</b>
+    { $asset }
 
-    Enter % price change to receive notifications:
+    📈 Send the % move that should trigger the alert, e.g. <code>10</code>.
+    <code>+5%</code> watches pumps only, <code>-5%</code> dumps only.
 threshold-above =
-    <b>{ $asset }</b>
+    { $asset }
 
-    Enter { $currency } price that should trigger when market moves above it:
+    🚀 Send the { $currency } price that should trigger when the market breaks above it:
     { $hint }
 threshold-below =
-    <b>{ $asset }</b>
+    { $asset }
 
-    Enter { $currency } price that should trigger when market drops below it:
+    🩸 Send the { $currency } price that should trigger when the market drops below it:
     { $hint }
-threshold-mcap =
-    <b>{ $asset }</b>
+threshold-mcap-above =
+    { $asset }
 
-    Enter actual market cap in { $currency }. FDV is not used.
-    One time: the alert is removed after it fires once. Otherwise it rearms and repeats.
+    🚀 Send the market cap in { $currency } that should trigger when it breaks above it. FDV is not used.
     { $hint }
-threshold-unit-hint = Shortcuts: 100k, 23m, 1b. Add a unit to override the currency, e.g. <code>$0.023</code>.
-threshold-unit-hint-native = Shortcuts: 100k, 23m, 1b. Add a unit to override the currency, e.g. <code>$0.023</code> or <code>1.2 { $symbol }</code>.
+threshold-mcap-below =
+    { $asset }
+
+    🩸 Send the market cap in { $currency } that should trigger when it drops below it. FDV is not used.
+    { $hint }
+threshold-unit-hint = 💡 Shortcuts: 100k, 23m, 1b, 1e-6, 0.0₄5. Add a unit to override the currency, e.g. <code>$0.023</code>.
+threshold-unit-hint-native = 💡 Shortcuts: 100k, 23m, 1b, 1e-6, 0.0₄5. Add a unit to override the currency, e.g. <code>$0.023</code> or <code>1.2 { $symbol }</code>.
+threshold-mcap-hint = 📊 Add <code>mc</code> for market cap, e.g. <code>17m mc</code>.
 button-default-percent = Default (10%)
+button-metric-price = 💲 Price
+button-metric-mcap = 📊 Market cap
 button-currency = Currency: { $currency }
 button-one-time = One time: { $state }
 usd-only = This asset is priced in USD only.
@@ -131,13 +143,15 @@ alert-create-failed = Could not create alert: { $reason }
 alert-created =
     ✅ <b>{ $symbol }</b> is now on your watchlist.
 
-    Trigger: { $condition }
-    Baseline: { $baseline }
-    Market: { $market }
-    Mode: { $mode }
+    🎯 Trigger: { $condition }
+    📍 Baseline: { $baseline }
+    🏦 Market: { $market }
+    🔁 Mode: { $mode }
 mode-repeat = repeat
 mode-one-time = one time
-condition-percent = Moves { $threshold } up or down
+condition-percent-both = Moves { $threshold } up or down
+condition-percent-up = Moves { $threshold } up
+condition-percent-down = Moves { $threshold } down
 condition-price-above = Price goes above { $threshold }
 condition-price-below = Price goes below { $threshold }
 condition-mcap-above = Market cap goes above { $threshold }
@@ -176,7 +190,9 @@ market-cap-short = MC
 
 ## Alert descriptions
 
-describe-percent = { $symbol } moves { $threshold } up or down
+describe-percent-both = { $symbol } moves { $threshold } up or down
+describe-percent-up = { $symbol } moves { $threshold } up
+describe-percent-down = { $symbol } moves { $threshold } down
 describe-price-above = { $symbol } above { $threshold }
 describe-price-below = { $symbol } below { $threshold }
 describe-mcap-above = { $symbol } market cap above { $threshold }
@@ -196,15 +212,15 @@ alert-not-found = Alert not found.
 alert-not-editable = Alert no longer editable.
 alert-deleted-toast = Deleted
 clear-expiry-before-resume = Clear the expiry before resuming.
-field-market = Market: { $value }
+field-market = 🏦 Market: { $value }
 field-status = Status: { $value }
-field-mode = Mode: { $value }
-field-threshold = Threshold: { $value }
-field-baseline = Baseline: { $value }
-field-cooldown = Cooldown: { $value }
-field-direction = Direction: { $value }
-field-expires = Expires: { $value }
-field-note = Note: { $value }
+field-mode = 🔁 Mode: { $value }
+field-threshold = 🎯 Threshold: { $value }
+field-baseline = 📍 Baseline: { $value }
+field-cooldown = ⏱ Cooldown: { $value }
+field-direction = ↕️ Direction: { $value }
+field-expires = ⏳ Expires: { $value }
+field-note = 📝 Note: { $value }
 status-active = ▶️ active
 status-paused = ⏸ paused
 note-none = none
@@ -227,7 +243,7 @@ expiry-expired = expired
 expiry-in = in { $duration }
 expiry-at = { $date } (in { $duration })
 prompt-note = Send a note, up to 300 characters. Send - to clear it.
-prompt-cooldown = Send a cooldown like 15m, 2h or 1d. Current: { $current }
+prompt-cooldown = Send a cooldown like 10s, 1m, 15m or 2h. Current: { $current }
 prompt-expiry = Send an expiry like 24h, 2d, 3mo or 1y. Send - to never expire. Current: { $current }
 prompt-threshold-percent = Send a new threshold in %. Current: { $current }
 prompt-threshold-price = Send a new price in { $units }. Current: { $current }
@@ -240,19 +256,19 @@ units-native = USD or { $symbol } (e.g. $0.023, 23m, 1.2 { $symbol })
 error-positive-number = Send a valid positive number.
 error-threshold-format = Send a positive finite number with at most 36 decimal places.
 error-threshold-range = Threshold must be positive, finite and fit within 36 decimal places.
-error-amount-format = Send a number like 0.023, 100k, 23m, 1b, optionally with a unit: $0.023, 1.2 ETH.
+error-amount-format = Send a number like 0.023, 100k, 23m, 1b, 1e-6 or 0.0₄5, optionally with a unit: $0.023, 1.2 ETH.
 error-amount-not-positive = Value must be a positive number.
-error-invalid-number = Invalid number: { $value }
+error-percent-format = Send a percent like 10, 2.5%, +5% or -5%.
 error-currency-usd = This asset is priced in USD, not { $unit }.
 error-currency-native = This asset is priced in USD or { $symbol }, not { $unit }.
 error-duration-format = Use a number with a unit: 15m, 24h, 2d, 5w, 3mo, 1y (also 15 min, 5 years).
 error-duration-not-positive = Duration must be positive.
-error-duration-too-short = Use at least 1 minute.
+error-duration-too-short = Use at least { $min }.
 error-duration-too-long = Use at most { $max }.
 error-note-length = Use 1 to 300 characters, or - to clear the note.
-error-alert-usage = Usage: /alert BTC 10% or /alert ETH > 70000
+error-alert-usage = Usage: /alert BTC 10%, /alert SOL +5% or /alert ETH > 70000
 error-alert-missing-parts = Missing asset query or alert condition.
-error-alert-condition = Condition must be a percent like 10% or threshold like > 70000, > 100k or < 0.8 ETH.
+error-alert-condition = Condition must be a percent like 10%, +5% or -5%, or a threshold like > 70000, < 0.8 ETH or > 17m mc.
 error-no-price = No valid price available.
 error-mcap-unavailable = Actual market cap is unavailable for this asset.
 error-url-https = Use an HTTPS URL on port 443.
@@ -338,13 +354,14 @@ button-disconnect = Disconnect
 ## Notifications
 
 notification-test = Price Bird connection test. No alert was triggered.
-notification-rule = <b>Rule:</b> { $rule }
-notification-price = <b>Price:</b> { $price }
-notification-floor = <b>Floor price:</b> { $native } { $symbol } ({ $usd })
-notification-market-cap = <b>Market cap:</b> { $value }
-notification-source = <b>Source:</b> { $source }
-notification-links = <b>Links:</b> { $links }
-notification-note = <b>Note:</b> { $note }
+notification-rule = 🎯 <b>Rule:</b> { $rule }
+notification-price = 💵 <b>Price:</b> { $price }
+notification-floor = 🖼 <b>Floor price:</b> { $native } { $symbol } ({ $usd })
+notification-market-cap = 📊 <b>Market cap:</b> { $value }
+notification-dex = 🏦 <b>DEX:</b> { $dex }
+notification-source = 🛰 <b>Source:</b> { $source }
+notification-links = 🔗 <b>Links:</b> { $links }
+notification-note = 📝 <b>Note:</b> { $note }
 rule-percent-both = { $threshold } move up or down
 rule-percent-up = { $threshold } move up
 rule-percent-down = { $threshold } move down

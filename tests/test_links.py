@@ -28,7 +28,9 @@ def test_link_builder_adds_safe_defaults() -> None:
 def test_format_links_uses_html_magic_links() -> None:
     links = format_links({"dexscreener": "https://dexscreener.com/ethereum/0xabc"})
 
-    assert links == '<a href="https://dexscreener.com/ethereum/0xabc">DexScreener</a>'
+    assert links == (
+        '<tg-emoji emoji-id="5917923733648973619">🦅</tg-emoji> <a href="https://dexscreener.com/ethereum/0xabc">DexScreener</a>'
+    )
 
 
 def test_link_builder_omits_chain_specific_links_when_unsupported() -> None:
