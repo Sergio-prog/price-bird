@@ -20,10 +20,13 @@ from app.alerts.formatting import (
     format_decimal,
     format_percent,
     format_threshold,
+    venue_label,
 )
+from app.alerts.icons import asset_icon, dex_label, icon, with_icon
 from app.alerts.links import format_links
-from app.db.enums import AlertType, AssetType
-from app.db.models import ConnectedApp, Delivery, User
+from app.bot.keyboards import notification_keyboard
+from app.db.enums import AlertStatus, AlertType, AssetType
+from app.db.models import Alert, ConnectedApp, Delivery, User
 from app.db.repositories.users import has_bot_access
 from app.db.session import SessionLocal
 from app.delivery.legacy import route_legacy_events
@@ -42,13 +45,17 @@ def render_payload(payload: dict) -> str:
     links = _safe_links(payload.get("links") or {})
     source = observation["source"]
     source_link = links.pop(source, None)
-    source_text = format_links({source: source_link}) if source_link else escape(_source_label(source))
+    source_text = format_links({source: source_link}) if source_link else escape(_source_label(source, asset))
+    heading = with_icon(
+        asset_icon(asset.get("kind"), asset.get("chain"), asset.get("exchange")), f"<b>{escape(asset['symbol'])}</b>"
+    )
     lines = [
-        f"🔔 <b>{escape(asset['symbol'])}</b> {_format_change(trigger)}",
+        f"{_trigger_emoji(trigger)} {heading} {_format_change(trigger)}",
         "",
         t("notification-rule", rule=_format_rule(rule)),
         _format_observation(asset, observation),
         *_format_market_cap(observation),
+        *_format_dex(asset),
         "",
         t("notification-source", source=source_text),
     ]
@@ -126,11 +133,24 @@ def _safe_links(links: dict) -> dict[str, str]:
     return {str(name): str(url) for name, url in links.items() if isinstance(url, str) and urlsplit(url).scheme == "https"}
 
 
-def _source_label(source: str) -> str:
+def _source_label(source: str, asset: dict) -> str:
+    if source == "ccxt" and asset.get("exchange"):
+        return venue_label(asset["exchange"])
     return {"dexscreener": "DexScreener", "opensea": "OpenSea"}.get(
         source,
         source.replace("_", " ").title(),
     )
+
+
+def _trigger_emoji(trigger: dict) -> str:
+    return "🩸" if trigger.get("direction") == "down" else "🚀"
+
+
+def _format_dex(asset: dict) -> list[str]:
+    dex = asset.get("dex")
+    if not dex or not isinstance(dex, str):
+        return []
+    return [t("notification-dex", dex=with_icon(icon(dex), escape(dex_label(dex))))]
 
 
 async def claim_delivery():
@@ -184,10 +204,13 @@ async def process_delivery(delivery: Delivery, bot: Bot) -> None:
             else:
                 with use_locale(resolve_locale(user.language, user.language_code)):
                     text = render_payload(delivery.payload)
+                    reply_markup = await _notification_markup(session, delivery)
                 await bot.send_message(
                     user.telegram_id,
                     text,
                     parse_mode="HTML",
+                    reply_markup=reply_markup,
+                    disable_web_page_preview=True,
                     disable_notification=in_quiet_hours(
                         datetime.now(UTC),
                         quiet_hours(user),
@@ -224,6 +247,18 @@ async def process_delivery(delivery: Delivery, bot: Bot) -> None:
                 next_attempt_at=datetime.now(UTC) + timedelta(seconds=delay),
             )
         )
+
+
+async def _notification_markup(session, delivery: Delivery):
+    alert_id = delivery.payload.get("alert_id")
+    if not str(alert_id or "").isdigit():
+        return None
+    alert = await session.get(Alert, int(alert_id))
+    if alert is None or alert.user_id != delivery.user_id:
+        return None
+    if alert.status not in {AlertStatus.ACTIVE.value, AlertStatus.PAUSED.value}:
+        return None
+    return notification_keyboard(alert.id)
 
 
 async def run_deliveries(bot: Bot) -> None:

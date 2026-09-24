@@ -9,17 +9,20 @@ from app.db.enums import AlertStatus, AlertType, AssetType
 from app.db.models import Alert
 from app.i18n import t
 from app.providers.base import AssetCandidate
+from app.utils.durations import format_duration
 
 ALERTS_PAGE_SIZE = 8
 CANDIDATES_LIMIT = 6
 FILTERED_CANDIDATES_LIMIT = 8
 SOURCES_PER_ROW = 2
+PERCENT_DIRECTIONS = ("both", "up", "down")
+METRICS = ("price", "mcap")
 
 
 def start_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=t("menu-new-alert"), callback_data="menu:newalert")],
+            [InlineKeyboardButton(text=t("menu-new-alert"), callback_data="menu:newalert", style="success")],
             [InlineKeyboardButton(text=t("menu-active-alerts"), callback_data="menu:alerts")],
             [InlineKeyboardButton(text=t("menu-examples"), callback_data="menu:examples")],
             [InlineKeyboardButton(text=t("menu-settings"), callback_data="settings:open")],
@@ -88,21 +91,53 @@ def alert_type_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text=t("alert-type-percent"), callback_data="alert_type:percent")],
             [InlineKeyboardButton(text=t("alert-type-above"), callback_data="alert_type:above")],
             [InlineKeyboardButton(text=t("alert-type-below"), callback_data="alert_type:below")],
-            [InlineKeyboardButton(text=t("alert-type-mcap-above"), callback_data="alert_type:mcap_above")],
-            [InlineKeyboardButton(text=t("alert-type-mcap-below"), callback_data="alert_type:mcap_below")],
             _wizard_nav_row(),
         ]
     )
 
 
 def threshold_keyboard(
-    alert_type: str, *, one_time: bool = True, currency: str = "USD", native_symbol: str | None = None
+    alert_type: str,
+    *,
+    one_time: bool = True,
+    currency: str = "USD",
+    native_symbol: str | None = None,
+    metric: str = "price",
+    supports_market_cap: bool = False,
+    direction: str = "both",
+    cooldown_seconds: int | None = None,
 ) -> InlineKeyboardMarkup:
     rows = []
     if alert_type == "percent":
-        rows.append([InlineKeyboardButton(text=t("button-default-percent"), callback_data="threshold:default_percent")])
-    if alert_type.startswith("mcap_"):
-        rows.append([InlineKeyboardButton(text=one_time_label(one_time), callback_data="threshold:toggle_once")])
+        rows.append(
+            [InlineKeyboardButton(text=t("button-default-percent"), callback_data="threshold:default_percent", style="success")]
+        )
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=_selected(format_direction_arrows(option), option == direction),
+                    callback_data=f"threshold:direction:{option}",
+                )
+                for option in PERCENT_DIRECTIONS
+            ]
+        )
+    elif supports_market_cap:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=_selected(t(f"button-metric-{option}"), option == metric), callback_data=f"threshold:metric:{option}"
+                )
+                for option in METRICS
+            ]
+        )
+    options_row = [InlineKeyboardButton(text=one_time_label(one_time), callback_data="threshold:toggle_once")]
+    if cooldown_seconds is not None:
+        options_row.append(
+            InlineKeyboardButton(
+                text=t("button-cooldown", value=format_duration(cooldown_seconds)), callback_data="threshold:cooldown"
+            )
+        )
+    rows.append(options_row)
     if alert_type != "percent" and native_symbol:
         rows.append(
             [InlineKeyboardButton(text=t("button-currency", currency=currency), callback_data="threshold:toggle_currency")]
@@ -114,8 +149,8 @@ def threshold_keyboard(
 def alert_created_keyboard(alert_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=t("button-edit-alert"), callback_data=f"alert_config:view:{alert_id}")],
-            [InlineKeyboardButton(text=t("button-add-another"), callback_data="menu:newalert")],
+            [InlineKeyboardButton(text=t("button-edit-alert"), callback_data=f"alert_config:view:{alert_id}", style="primary")],
+            [InlineKeyboardButton(text=t("button-add-another"), callback_data="menu:newalert", style="success")],
             [InlineKeyboardButton(text=t("menu-active-alerts"), callback_data="menu:alerts")],
             [InlineKeyboardButton(text=t("button-menu"), callback_data="wizard:cancel")],
         ]
@@ -173,6 +208,22 @@ def alert_button_label(alert: Alert, index: int) -> str:
 
 def one_time_label(one_time: bool) -> str:
     return t("button-one-time", state="✅" if one_time else "❌")
+
+
+def notification_keyboard(alert_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=t("button-alert-settings"), callback_data=f"alert_config:open:{alert_id}", style="primary"
+                )
+            ]
+        ]
+    )
+
+
+def _selected(label: str, selected: bool) -> str:
+    return f"✅ {label}" if selected else label
 
 
 def _menu_button_row() -> list[InlineKeyboardButton]:

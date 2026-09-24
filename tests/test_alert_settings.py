@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.alerts.formatting import format_compact_usd, format_threshold
-from app.bot.handlers.alert_settings import _next_option, _parse_bounded_duration, alert_settings_view
+from app.bot.handlers.alert_settings import MIN_COOLDOWN, MIN_EXPIRY, _next_option, _parse_bounded_duration, alert_settings_view
 from app.utils.durations import format_duration, parse_duration
 
 
@@ -117,8 +117,11 @@ def test_format_duration() -> None:
 
 
 def test_bounded_duration_limits() -> None:
-    assert _parse_bounded_duration("2h", timedelta(days=1)) == timedelta(hours=2)
-    with pytest.raises(ValueError, match="at least 1 minute"):
-        _parse_bounded_duration("30s", timedelta(days=1))
+    assert _parse_bounded_duration("2h", MIN_COOLDOWN, timedelta(days=1)) == timedelta(hours=2)
+    assert _parse_bounded_duration("10s", MIN_COOLDOWN, timedelta(days=1)) == timedelta(seconds=10)
+    with pytest.raises(ValueError, match="at least 10s"):
+        _parse_bounded_duration("5s", MIN_COOLDOWN, timedelta(days=1))
+    with pytest.raises(ValueError, match="at least 1m"):
+        _parse_bounded_duration("30s", MIN_EXPIRY, timedelta(days=1))
     with pytest.raises(ValueError, match="at most 1d"):
-        _parse_bounded_duration("2d", timedelta(days=1))
+        _parse_bounded_duration("2d", MIN_COOLDOWN, timedelta(days=1))

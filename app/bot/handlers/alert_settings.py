@@ -13,7 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.alerts.formatting import format_decimal, format_direction, format_direction_arrows, format_threshold
-from app.alerts.service import MOVE_ALERT_TYPES, alert_currency, asset_kind_label, describe_alert
+from app.alerts.icons import asset_icon, with_icon
+from app.alerts.parser import PERCENT_DIRECTIONS
+from app.alerts.service import MIN_COOLDOWN_SECONDS, MOVE_ALERT_TYPES, alert_currency, asset_kind_label, describe_alert
 from app.bot.handlers.alerts import alerts_message
 from app.bot.handlers.settings import keyboard, owned_user
 from app.bot.keyboards import one_time_label
@@ -22,7 +24,7 @@ from app.db import repositories as repo
 from app.db.enums import AlertStatus, AlertType
 from app.db.models import Alert
 from app.i18n import LocalizedError, t
-from app.utils.amounts import parse_amount, resolve_currency
+from app.utils.amounts import parse_amount, parse_percent, resolve_currency, split_market_cap_suffix
 from app.utils.currency import native_symbol_or_none
 from app.utils.durations import format_duration, parse_duration
 
@@ -31,7 +33,8 @@ router = Router(name="alert_settings")
 DIRECTION_OPTIONS = ["both", "up", "down"]
 EDITABLE_STATUSES = [AlertStatus.ACTIVE.value, AlertStatus.PAUSED.value]
 INPUT_FIELDS = {"threshold", "note", "cooldown", "expiry"}
-MIN_DURATION = timedelta(minutes=1)
+MIN_COOLDOWN = timedelta(seconds=MIN_COOLDOWN_SECONDS)
+MIN_EXPIRY = timedelta(minutes=1)
 MAX_COOLDOWN = timedelta(days=365)
 MAX_EXPIRY = timedelta(days=5 * 365)
 
@@ -55,6 +58,11 @@ async def configure_alert(callback: CallbackQuery, state: FSMContext, session: A
         await callback.answer(t("alert-not-found"))
         return
     action = parts[1]
+    if action == "open":
+        text, markup = alert_settings_view(alert)
+        await callback.message.answer(text, reply_markup=markup, parse_mode="HTML", disable_web_page_preview=True)
+        await callback.answer()
+        return
     if action in INPUT_FIELDS:
         await state.set_state(AlertEdit.waiting_value)
         await state.update_data(alert_id=alert.id, field=action)
@@ -105,9 +113,15 @@ async def edit_alert_value(message: Message, state: FSMContext, session: AsyncSe
     if data["field"] == "threshold":
         try:
             if alert.type == AlertType.PERCENT_CHANGE.value:
-                value, currency = Decimal(text.removesuffix("%").strip()), "USD"
+                value, sign = parse_percent(text)
+                currency = "USD"
+                if sign:
+                    alert.direction = PERCENT_DIRECTIONS[sign].value
             else:
-                value, unit = parse_amount(text)
+                amount = text
+                if alert.type in {AlertType.MCAP_ABOVE.value, AlertType.MCAP_BELOW.value}:
+                    amount, _ = split_market_cap_suffix(text)
+                value, unit = parse_amount(amount)
                 currency = resolve_currency(unit, default=alert_currency(alert), native_symbol=_native_symbol(alert))
             if not value.is_finite() or value <= 0 or value >= Decimal("1e42") or value.as_tuple().exponent < -36:
                 raise LocalizedError("error-threshold-format")
@@ -122,7 +136,7 @@ async def edit_alert_value(message: Message, state: FSMContext, session: AsyncSe
         alert.armed = True
     elif data["field"] == "cooldown":
         try:
-            alert.cooldown_seconds = int(_parse_bounded_duration(text, MAX_COOLDOWN).total_seconds())
+            alert.cooldown_seconds = int(_parse_bounded_duration(text, MIN_COOLDOWN, MAX_COOLDOWN).total_seconds())
         except ValueError as exc:
             await message.answer(str(exc))
             return
@@ -131,7 +145,7 @@ async def edit_alert_value(message: Message, state: FSMContext, session: AsyncSe
             alert.expires_at = None
         else:
             try:
-                alert.expires_at = datetime.now(UTC) + _parse_bounded_duration(text, MAX_EXPIRY)
+                alert.expires_at = datetime.now(UTC) + _parse_bounded_duration(text, MIN_EXPIRY, MAX_EXPIRY)
             except ValueError as exc:
                 await message.answer(str(exc))
                 return
@@ -160,7 +174,7 @@ def alert_settings_view(alert: Alert) -> tuple[str, InlineKeyboardMarkup]:
     active = alert.status == AlertStatus.ACTIVE.value
     lines = [
         f"⚙️ <b>{escape(describe_alert(alert))}</b>",
-        t("field-market", value=escape(asset_kind_label(asset))) if asset else None,
+        t("field-market", value=_market_label(asset)) if asset else None,
         "",
         t("field-status", value=t("status-active" if active else "status-paused")),
         t("field-mode", value=_mode_label(alert)),
@@ -172,7 +186,7 @@ def alert_settings_view(alert: Alert) -> tuple[str, InlineKeyboardMarkup]:
         t("field-note", value=escape(alert.note) if alert.note else t("note-none")),
     ]
     rows = [
-        [(t("button-pause" if active else "button-resume"), f"alert_config:pause:{alert.id}")],
+        [(t("button-pause" if active else "button-resume"), f"alert_config:pause:{alert.id}", None if active else "success")],
         [(one_time_label(not alert.repeat), f"alert_config:repeat:{alert.id}")],
         [(t("button-cooldown", value=format_duration(alert.cooldown_seconds)), f"alert_config:cooldown:{alert.id}")],
     ]
@@ -183,10 +197,15 @@ def alert_settings_view(alert: Alert) -> tuple[str, InlineKeyboardMarkup]:
     rows += [
         [(t("button-threshold"), f"alert_config:threshold:{alert.id}"), (t("button-note"), f"alert_config:note:{alert.id}")],
         [(t("button-expires", value=_expiry_label(alert, compact=True)), f"alert_config:expiry:{alert.id}")],
-        [(t("button-delete"), f"alert_config:delete:{alert.id}")],
+        [(t("button-delete"), f"alert_config:delete:{alert.id}", "danger")],
         [(t("button-back-to-alerts"), "menu:alerts")],
     ]
     return "\n".join(line for line in lines if line is not None), keyboard(rows)
+
+
+def _market_label(asset) -> str:
+    exchange = (getattr(asset, "extra", None) or {}).get("exchange")
+    return with_icon(asset_icon(asset.type, asset.chain, exchange), escape(asset_kind_label(asset)))
 
 
 async def _load_alert(session: AsyncSession, user_id: int, alert_id: int) -> Alert | None:
@@ -230,7 +249,7 @@ def _confirm_delete_text(alert: Alert) -> str:
 def _confirm_delete_keyboard(alert: Alert) -> InlineKeyboardMarkup:
     return keyboard(
         [
-            [(t("button-confirm-delete"), f"alert_config:confirm_delete:{alert.id}")],
+            [(t("button-confirm-delete"), f"alert_config:confirm_delete:{alert.id}", "danger")],
             [(t("button-back"), f"alert_config:view:{alert.id}")],
         ]
     )
@@ -254,10 +273,10 @@ def _expiry_label(alert: Alert, *, compact: bool = False) -> str:
     return t("expiry-at", date=alert.expires_at.strftime("%Y-%m-%d %H:%M UTC"), duration=format_duration(remaining))
 
 
-def _parse_bounded_duration(text: str, maximum: timedelta) -> timedelta:
+def _parse_bounded_duration(text: str, minimum: timedelta, maximum: timedelta) -> timedelta:
     duration = parse_duration(text)
-    if duration < MIN_DURATION:
-        raise LocalizedError("error-duration-too-short")
+    if duration < minimum:
+        raise LocalizedError("error-duration-too-short", min=format_duration(int(minimum.total_seconds())))
     if duration > maximum:
         raise LocalizedError("error-duration-too-long", max=format_duration(int(maximum.total_seconds())))
     return duration

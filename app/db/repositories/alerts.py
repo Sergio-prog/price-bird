@@ -23,6 +23,7 @@ async def create_alert(
     direction: str,
     repeat: bool | None = None,
     threshold_currency: str = "USD",
+    cooldown_seconds: int | None = None,
 ) -> Alert:
     alert = Alert(
         user_id=user_id,
@@ -34,6 +35,8 @@ async def create_alert(
         direction=direction,
         repeat=alert_type == "percent_change" if repeat is None else repeat,
     )
+    if cooldown_seconds is not None:
+        alert.cooldown_seconds = cooldown_seconds
     session.add(alert)
     await session.flush()
     return alert

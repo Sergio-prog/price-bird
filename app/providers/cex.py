@@ -7,6 +7,7 @@ from collections import defaultdict
 from collections.abc import Callable, Sequence
 from decimal import Decimal
 from typing import Any
+from urllib.parse import quote as url_quote
 
 import ccxt.async_support as ccxt
 from ccxt.base.errors import DDoSProtection, RateLimitExceeded
@@ -45,6 +46,13 @@ def _is_spot(market: dict[str, Any]) -> bool:
 
 def _quote_volume(ticker: dict[str, Any] | None) -> float:
     return float((ticker or {}).get("quoteVolume") or 0)
+
+
+def tradingview_chart_url(exchange_id: str, market: dict[str, Any]) -> str:
+    ticker = f"{exchange_id.upper()}:{market.get('base')}{market.get('quote')}"
+    if market.get("swap"):
+        ticker += ".P"
+    return f"https://www.tradingview.com/chart/?symbol={url_quote(ticker)}"
 
 
 def ban_pause_seconds(exc: Exception) -> float:
@@ -104,7 +112,7 @@ class CcxtProvider:
                 symbol=best,
                 name=f"{self.exchange_id.upper()} {best}",
                 metadata={"exchange": self.exchange_id, "price_usd": format_price(ticker_price(ticker))},
-                links={"tradingview": f"https://www.tradingview.com/symbols/{exchange.markets[best].get('base')}USDT/"},
+                links={"tradingview": tradingview_chart_url(self.exchange_id, exchange.markets[best])},
                 volume_usd=_quote_volume(ticker),
             )
         ]

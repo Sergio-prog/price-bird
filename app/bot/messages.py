@@ -54,13 +54,31 @@ def no_matches_message(*, nft: bool) -> str:
     return t("no-matches-nft" if nft else "no-matches-token")
 
 
-def threshold_prompt(*, asset_label: str, alert_type: str, currency: str = "USD", native_symbol: str | None = None) -> str:
-    asset = escape(asset_label)
+def asset_heading(label: str, icon: str = "") -> str:
+    title = f"<b>{escape(label)}</b>"
+    return f"{icon} {title}" if icon else title
+
+
+def alert_type_prompt(asset: str) -> str:
+    return t("alert-type-prompt", asset=asset)
+
+
+def threshold_prompt(
+    *,
+    asset: str,
+    alert_type: str,
+    metric: str = "price",
+    currency: str = "USD",
+    native_symbol: str | None = None,
+    supports_market_cap: bool = False,
+) -> str:
     if alert_type == "percent":
         return t("threshold-percent", asset=asset)
     if native_symbol:
         hint = t("threshold-unit-hint-native", symbol=escape(native_symbol))
     else:
         hint = t("threshold-unit-hint")
-    key = {"above": "threshold-above", "below": "threshold-below"}.get(alert_type, "threshold-mcap")
+    if supports_market_cap and metric == "price":
+        hint += "\n" + t("threshold-mcap-hint")
+    key = f"threshold-mcap-{alert_type}" if metric == "mcap" else f"threshold-{alert_type}"
     return t(key, asset=asset, currency=escape(currency), hint=hint)

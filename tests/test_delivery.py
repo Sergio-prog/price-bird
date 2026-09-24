@@ -102,6 +102,29 @@ async def test_user_coin_link_is_included_with_source() -> None:
 
 
 @pytest.mark.asyncio
+async def test_cex_alert_falls_back_to_tradingview_link() -> None:
+    rows = []
+    session = SimpleNamespace(add=rows.append, scalars=AsyncMock(return_value=[]))
+    user = User(id=1, telegram_id=42, bird_enabled=True, role="admin", access_status="active", coin_link="dexscreener")
+    alert = Alert(
+        id=2,
+        user_id=1,
+        user=user,
+        type="percent_change",
+        threshold_value=Decimal("6"),
+        baseline_price=Decimal("1"),
+        direction="both",
+    )
+    asset = Asset(symbol="NEAR/USDT", type="cex_symbol", extra={"exchange": "binance"})
+    event = SimpleNamespace(id=3, created_at=datetime.now(UTC), direction="up", percent_change=Decimal("6"))
+
+    await queue_event(session, event, alert, asset, PriceQuote(Decimal("2"), "ccxt", {}))
+
+    assert rows[0].payload["links"] == {"tradingview": "https://www.tradingview.com/search/?query=NEARUSDT"}
+    assert rows[0].payload["asset"]["exchange"] == "binance"
+
+
+@pytest.mark.asyncio
 async def test_repeating_move_alert_rebases_and_respects_cooldown(monkeypatch):
     alert = Alert(
         id=1,
@@ -297,13 +320,13 @@ def test_render_payload_formats_percent_alert_and_links_source():
         }
     )
 
-    assert message.startswith("🔔 <b>MEME</b> ↑ +11.45%\n\n")
+    assert message.startswith('🚀 <tg-emoji emoji-id="5917864617719111990">🟣</tg-emoji> <b>MEME</b> ↑ +11.45%\n\n')
     assert "<b>Rule:</b> 10% move up or down" in message
-    assert "<b>Price:</b> $0.05829\n<b>Market cap:</b> $1M\n\n" in message
+    assert "<b>Price:</b> $0.05829\n📊 <b>Market cap:</b> $1M\n\n" in message
     assert "Floor" not in message
     assert "Baseline" not in message
-    assert '<b>Source:</b> <a href="https://dexscreener.com/solana/token">DexScreener</a>' in message
-    assert '<b>Links:</b> <a href="https://www.tradingview.com/search/?query=MEME">TradingView</a>' in message
+    assert '🦅</tg-emoji> <a href="https://dexscreener.com/solana/token">DexScreener</a>' in message
+    assert '<b>Links:</b> 📈 <a href="https://www.tradingview.com/search/?query=MEME">TradingView</a>' in message
 
 
 @pytest.mark.asyncio
@@ -356,9 +379,9 @@ def test_render_payload_rounds_noisy_nft_floor_and_marks_direction():
         }
     )
 
-    assert message.startswith("🔔 <b>MILADY</b> ↓ -5.31%\n\n")
+    assert message.startswith('🩸 <tg-emoji emoji-id="5915524517672787258">💎</tg-emoji> <b>MILADY</b> ↓ -5.31%\n\n')
     assert "<b>Rule:</b> 5% move up or down" in message
-    assert "<b>Floor price:</b> 0.9498 ETH ($2,477.03)\n<b>Market cap:</b> $1.23B\n\n" in message
+    assert "<b>Floor price:</b> 0.9498 ETH ($2,477.03)\n📊 <b>Market cap:</b> $1.23B\n\n" in message
     assert "Baseline" not in message
     assert "Links:" not in message
 
@@ -379,3 +402,30 @@ def test_render_payload_shows_compact_market_cap():
     assert "<b>Rule:</b> Market cap above $5B" in message
     assert "<b>Price:</b> $0.00001213" in message
     assert "<b>Market cap:</b> $5.1B" in message
+
+
+def test_render_payload_names_cex_exchange_and_dex():
+    payload = {
+        "type": "alert.triggered",
+        "note": None,
+        "asset": {"symbol": "NEAR/USDT", "kind": "cex_symbol", "chain": None, "address": None, "exchange": "binance"},
+        "rule": {
+            "type": "percent_change",
+            "threshold": "6",
+            "threshold_currency": "USD",
+            "baseline": "4.4",
+            "direction": "both",
+        },
+        "observation": {"price_usd": "4.71", "source": "ccxt", "price_native": None, "native_symbol": None},
+        "trigger": {"direction": "up", "percent_change": "6.18"},
+        "links": {"tradingview": "https://www.tradingview.com/chart/?symbol=BINANCE%3ANEARUSDT"},
+    }
+
+    message = render_payload(payload)
+
+    assert "<b>Source:</b> Binance" in message
+    assert "TradingView</a>" in message
+    assert "DEX" not in message
+
+    payload["asset"] = {"symbol": "BONK", "kind": "token", "chain": "solana", "dex": "raydium"}
+    assert "<b>DEX:</b> " in render_payload(payload) and "Raydium" in render_payload(payload)

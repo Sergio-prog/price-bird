@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal
@@ -19,6 +21,7 @@ logger = logging.getLogger(__name__)
 SPOT = "spot"
 PERP = "perp"
 STABLE_QUOTE_PREFIX = "USD"
+MARKETS_CACHE_SECONDS = 2.0
 
 
 @dataclass(frozen=True)
@@ -105,10 +108,12 @@ class HyperliquidProvider:
     name = "hyperliquid"
     info_url = "https://api.hyperliquid.xyz/info"
 
-    def __init__(self, *, client: HttpClient | None = None) -> None:
+    def __init__(self, *, client: HttpClient | None = None, markets_cache_seconds: float = MARKETS_CACHE_SECONDS) -> None:
         self.client = client or HttpClient(
             throttle=ProviderThrottle(self.name, rate_per_minute=settings.hyperliquid_requests_per_minute)
         )
+        self.markets_cache_seconds = markets_cache_seconds
+        self._markets_cache: dict[str, tuple[float, list[Market]]] = {}
 
     async def search_assets(self, query: str, *, nft: bool = False) -> list[AssetCandidate]:
         if nft:
@@ -117,14 +122,15 @@ class HyperliquidProvider:
         if not base:
             return []
 
+        spot_list, *perp_lists = await asyncio.gather(*(self._markets(kind) for kind in ((SPOT,) if quote else (SPOT, PERP))))
         spot = [
             market
-            for market in await self._markets(SPOT)
+            for market in spot_list
             if market.base.upper() == base
             and market.quote.upper().startswith(STABLE_QUOTE_PREFIX)
             and quote in {"", market.quote.upper()}
         ]
-        perps = [] if quote else [market for market in await self._markets(PERP) if market.base.upper() == base]
+        perps = [market for markets in perp_lists for market in markets if market.base.upper() == base]
         matches = [*sorted(spot, key=lambda market: market.volume_usd, reverse=True)[:1], *perps]
         venue_volume_usd = sum(market.volume_usd for market in matches)
         return [self._candidate(market, volume_usd=venue_volume_usd) for market in matches]
@@ -164,9 +170,15 @@ class HyperliquidProvider:
         await self.client.close()
 
     async def _markets(self, kind: str) -> list[Market]:
+        cached = self._markets_cache.get(kind)
+        if cached is not None and time.monotonic() - cached[0] < self.markets_cache_seconds:
+            return cached[1]
         if kind == SPOT:
-            return spot_markets(await self.client.post_json(self.info_url, body={"type": "spotMetaAndAssetCtxs"}))
-        return perp_markets(await self.client.post_json(self.info_url, body={"type": "metaAndAssetCtxs"}))
+            markets = spot_markets(await self.client.post_json(self.info_url, body={"type": "spotMetaAndAssetCtxs"}))
+        else:
+            markets = perp_markets(await self.client.post_json(self.info_url, body={"type": "metaAndAssetCtxs"}))
+        self._markets_cache[kind] = (time.monotonic(), markets)
+        return markets
 
     def _candidate(self, market: Market, *, volume_usd: float) -> AssetCandidate:
         return AssetCandidate(

@@ -94,22 +94,25 @@ def test_back_keyboards_use_expected_callbacks() -> None:
     assert [button.callback_data for button in back.inline_keyboard[0]] == ["wizard:back", "wizard:cancel"]
 
 
-def test_threshold_keyboard_has_default_percent_and_back() -> None:
-    keyboard = threshold_keyboard("percent")
+def test_threshold_keyboard_percent_offers_default_direction_and_one_time() -> None:
+    keyboard = threshold_keyboard("percent", one_time=False, direction="up", cooldown_seconds=60)
 
-    assert keyboard.inline_keyboard[0][0].text == "Default (10%)"
     assert keyboard.inline_keyboard[0][0].callback_data == "threshold:default_percent"
-    assert keyboard.inline_keyboard[1][0].callback_data == "wizard:back"
+    assert [button.text for button in keyboard.inline_keyboard[1]] == ["↑↓", "✅ ↑", "↓"]
+    assert [button.callback_data for button in keyboard.inline_keyboard[2]] == ["threshold:toggle_once", "threshold:cooldown"]
+    assert keyboard.inline_keyboard[-1][0].callback_data == "wizard:back"
 
 
-def test_threshold_keyboard_offers_one_time_toggle_for_market_cap() -> None:
-    enabled = threshold_keyboard("mcap_above", one_time=True)
-    disabled = threshold_keyboard("mcap_below", one_time=False)
+def test_threshold_keyboard_offers_market_cap_mode_only_when_supported() -> None:
+    supported = threshold_keyboard("above", supports_market_cap=True, metric="mcap")
+    unsupported = threshold_keyboard("above")
 
-    assert enabled.inline_keyboard[0][0].text == "One time: ✅"
-    assert enabled.inline_keyboard[0][0].callback_data == "threshold:toggle_once"
-    assert disabled.inline_keyboard[0][0].text == "One time: ❌"
-    assert threshold_keyboard("above").inline_keyboard[0][0].callback_data == "wizard:back"
+    assert [button.callback_data for button in supported.inline_keyboard[0]] == [
+        "threshold:metric:price",
+        "threshold:metric:mcap",
+    ]
+    assert supported.inline_keyboard[0][1].text == "✅ 📊 Market cap"
+    assert unsupported.inline_keyboard[0][0].text == "One time: ✅"
 
 
 def _candidate(symbol: str, *, chain: str | None = None, exchange: str | None = None, price: str = "1", address: str = "abc"):
@@ -188,10 +191,10 @@ def test_threshold_keyboard_offers_currency_toggle_only_with_native_symbol() -> 
     with_native = threshold_keyboard("above", currency="ETH", native_symbol="ETH")
     without_native = threshold_keyboard("above")
 
-    assert with_native.inline_keyboard[0][0].text == "Currency: ETH"
-    assert with_native.inline_keyboard[0][0].callback_data == "threshold:toggle_currency"
-    assert without_native.inline_keyboard[0][0].callback_data == "wizard:back"
-    assert threshold_keyboard("percent", native_symbol="ETH").inline_keyboard[1][0].callback_data == "wizard:back"
+    assert with_native.inline_keyboard[1][0].text == "Currency: ETH"
+    assert with_native.inline_keyboard[1][0].callback_data == "threshold:toggle_currency"
+    assert without_native.inline_keyboard[1][0].callback_data == "wizard:back"
+    assert "threshold:toggle_currency" not in str(threshold_keyboard("percent", native_symbol="ETH"))
 
 
 def test_alert_button_label_shows_native_currency() -> None:

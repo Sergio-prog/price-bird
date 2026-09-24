@@ -10,14 +10,17 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.alerts.parser import ParsedAlertCommand, parse_alert_command
+from app.alerts.parser import PERCENT_DIRECTIONS, ParsedAlertCommand, parse_alert_command, threshold_alert_type
+from app.alerts.service import COOLDOWN_PRESETS, DEFAULT_COOLDOWN_SECONDS
 from app.bot.handlers.helpers import (
     candidate_from_dict,
+    candidate_heading,
     command_int_arg,
     create_alert_from_candidate,
     ensure_access,
     parsed_from_dict,
     parsed_to_dict,
+    supports_market_cap,
 )
 from app.bot.keyboards import (
     alert_list_keyboard,
@@ -32,6 +35,7 @@ from app.bot.keyboards import (
     wizard_back_keyboard,
 )
 from app.bot.messages import (
+    alert_type_prompt,
     alerts_list_message,
     asset_type_prompt,
     examples_message,
@@ -49,7 +53,7 @@ from app.db.enums import AlertDirection, AlertType, AssetType
 from app.i18n import LocalizedError, t
 from app.providers.base import ProviderConfigurationError
 from app.providers.registry import provider_registry
-from app.utils.amounts import parse_amount, resolve_currency
+from app.utils.amounts import parse_amount, parse_percent, resolve_currency, split_market_cap_suffix
 from app.utils.currency import native_symbol_or_none
 
 router = Router(name="alerts")
@@ -237,6 +241,13 @@ async def wizard_query(message: Message, state: FSMContext, session: AsyncSessio
         await _send_wizard_message(message, state, no_matches_message(nft=nft), reply_markup=wizard_back_keyboard())
         return
     await state.update_data(candidates=[candidate.__dict__ for candidate in candidates], asset_venue=None)
+    if len(candidates) == 1:
+        await state.update_data(selected_candidate=candidates[0].__dict__)
+        await state.set_state(AlertWizard.waiting_type)
+        await _send_wizard_message(
+            message, state, alert_type_prompt(candidate_heading(candidates[0])), reply_markup=alert_type_keyboard()
+        )
+        return
     await state.set_state(AlertWizard.waiting_asset)
     await _send_wizard_message(message, state, t("candidates-prompt"), reply_markup=asset_candidates_keyboard(candidates))
 
@@ -264,7 +275,12 @@ async def wizard_asset(callback: CallbackQuery, state: FSMContext, session: Asyn
     else:
         await state.set_state(AlertWizard.waiting_type)
         if isinstance(callback.message, Message):
-            await callback.message.edit_text(t("alert-type-prompt"), reply_markup=alert_type_keyboard())
+            await _edit_message(
+                callback.message,
+                alert_type_prompt(candidate_heading(candidate)),
+                reply_markup=alert_type_keyboard(),
+                parse_mode="HTML",
+            )
     await callback.answer()
 
 
@@ -329,6 +345,9 @@ async def wizard_back_to_query(callback: CallbackQuery, state: FSMContext) -> No
 @router.callback_query(AlertWizard.waiting_type, F.data == "wizard:back")
 async def wizard_back_to_candidates(callback: CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
+    if len(data.get("candidates", [])) == 1:
+        await wizard_back_to_query(callback, state)
+        return
     await state.set_state(AlertWizard.waiting_asset)
     if isinstance(callback.message, Message):
         await _edit_message(callback.message, t("candidates-prompt"), reply_markup=_candidates_keyboard(data))
@@ -339,7 +358,13 @@ async def wizard_back_to_candidates(callback: CallbackQuery, state: FSMContext) 
 async def wizard_back_to_type(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(AlertWizard.waiting_type)
     if isinstance(callback.message, Message):
-        await _edit_message(callback.message, t("alert-type-prompt"), reply_markup=alert_type_keyboard())
+        candidate = candidate_from_dict((await state.get_data())["selected_candidate"])
+        await _edit_message(
+            callback.message,
+            alert_type_prompt(candidate_heading(candidate)),
+            reply_markup=alert_type_keyboard(),
+            parse_mode="HTML",
+        )
     await callback.answer()
 
 
@@ -350,7 +375,16 @@ async def wizard_type(callback: CallbackQuery, state: FSMContext) -> None:
     candidate = candidate_from_dict(data["selected_candidate"])
     native_symbol = native_symbol_or_none(candidate.metadata.get("native_symbol"))
     currency = native_symbol if native_symbol and candidate.type == AssetType.NFT_COLLECTION else "USD"
-    await state.update_data(alert_type=value, one_time=True, currency=currency, native_symbol=native_symbol)
+    await state.update_data(
+        alert_type=value,
+        one_time=value != "percent",
+        currency=currency,
+        native_symbol=native_symbol,
+        metric="price",
+        supports_market_cap=supports_market_cap(candidate),
+        direction=AlertDirection.BOTH.value,
+        cooldown_seconds=DEFAULT_COOLDOWN_SECONDS,
+    )
     await state.set_state(AlertWizard.waiting_threshold)
     if isinstance(callback.message, Message):
         await _render_threshold_step(callback.message, await state.get_data())
@@ -362,7 +396,38 @@ async def wizard_toggle_once(callback: CallbackQuery, state: FSMContext) -> None
     data = await state.get_data()
     await state.update_data(one_time=not data.get("one_time", True))
     if isinstance(callback.message, Message):
-        await callback.message.edit_reply_markup(reply_markup=_threshold_keyboard(await state.get_data()))
+        await _edit_reply_markup(callback.message, _threshold_keyboard(await state.get_data()))
+    await callback.answer()
+
+
+@router.callback_query(AlertWizard.waiting_threshold, F.data.startswith("threshold:direction:"))
+async def wizard_direction(callback: CallbackQuery, state: FSMContext) -> None:
+    direction = (callback.data or "").rsplit(":", 1)[1]
+    if direction in {item.value for item in AlertDirection}:
+        await state.update_data(direction=direction)
+    if isinstance(callback.message, Message):
+        await _edit_reply_markup(callback.message, _threshold_keyboard(await state.get_data()))
+    await callback.answer()
+
+
+@router.callback_query(AlertWizard.waiting_threshold, F.data.startswith("threshold:metric:"))
+async def wizard_metric(callback: CallbackQuery, state: FSMContext) -> None:
+    metric = (callback.data or "").rsplit(":", 1)[1]
+    if metric in {"price", "mcap"}:
+        await state.update_data(metric=metric)
+    if isinstance(callback.message, Message):
+        await _render_threshold_step(callback.message, await state.get_data())
+    await callback.answer()
+
+
+@router.callback_query(AlertWizard.waiting_threshold, F.data == "threshold:cooldown")
+async def wizard_cooldown(callback: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    current = data.get("cooldown_seconds", DEFAULT_COOLDOWN_SECONDS)
+    following = [preset for preset in COOLDOWN_PRESETS if preset > current]
+    await state.update_data(cooldown_seconds=following[0] if following else COOLDOWN_PRESETS[0])
+    if isinstance(callback.message, Message):
+        await _edit_reply_markup(callback.message, _threshold_keyboard(await state.get_data()))
     await callback.answer()
 
 
@@ -383,7 +448,7 @@ async def wizard_toggle_currency(callback: CallbackQuery, state: FSMContext) -> 
 async def wizard_default_threshold(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
     data = await state.get_data()
     candidate = candidate_from_dict(data["selected_candidate"])
-    parsed = _parsed_threshold("percent", Decimal("10"))
+    parsed = _parsed_threshold(data, Decimal("10"))
     if isinstance(callback.message, Message) and callback.from_user is not None:
         await create_alert_from_candidate(
             callback.message,
@@ -392,6 +457,8 @@ async def wizard_default_threshold(callback: CallbackQuery, state: FSMContext, s
             candidate,
             edit_message=True,
             telegram_id=callback.from_user.id,
+            repeat=not data.get("one_time", False),
+            cooldown_seconds=data.get("cooldown_seconds"),
         )
     await state.clear()
     await callback.answer()
@@ -403,9 +470,15 @@ async def wizard_threshold(message: Message, state: FSMContext, session: AsyncSe
     text = (message.text or "").strip()
     try:
         if data["alert_type"] == "percent":
-            threshold, currency = Decimal(text.removesuffix("%").strip()), "USD"
+            threshold, sign = parse_percent(text)
+            currency = "USD"
+            if sign:
+                data["direction"] = PERCENT_DIRECTIONS[sign].value
         else:
-            threshold, unit = parse_amount(text)
+            amount, market_cap = split_market_cap_suffix(text)
+            if market_cap:
+                data["metric"] = "mcap"
+            threshold, unit = parse_amount(amount)
             currency = resolve_currency(unit, default=data.get("currency", "USD"), native_symbol=data.get("native_symbol"))
         if not threshold.is_finite() or threshold <= 0 or threshold >= Decimal("1e42"):
             raise LocalizedError("error-positive-number")
@@ -416,14 +489,15 @@ async def wizard_threshold(message: Message, state: FSMContext, session: AsyncSe
         await message.answer(t("error-positive-number"), reply_markup=wizard_back_keyboard())
         return
 
-    parsed = _parsed_threshold(data["alert_type"], threshold, currency)
+    parsed = _parsed_threshold(data, threshold, currency)
     candidate = candidate_from_dict(data["selected_candidate"])
     await create_alert_from_candidate(
         message,
         session,
         parsed,
         candidate,
-        repeat=_wizard_repeat(data),
+        repeat=not data.get("one_time", data["alert_type"] != "percent"),
+        cooldown_seconds=data.get("cooldown_seconds"),
     )
     await state.clear()
 
@@ -433,10 +507,12 @@ async def _render_threshold_step(message: Message, data: dict) -> None:
     await _edit_message(
         message,
         threshold_prompt(
-            asset_label=_candidate_display(candidate),
+            asset=candidate_heading(candidate),
             alert_type=data["alert_type"],
+            metric=data.get("metric", "price"),
             currency=data.get("currency", "USD"),
             native_symbol=data.get("native_symbol"),
+            supports_market_cap=data.get("supports_market_cap", False),
         ),
         reply_markup=_threshold_keyboard(data),
         parse_mode="HTML",
@@ -459,11 +535,16 @@ def _venue_for_action(data: dict, action: str) -> str | None:
 
 
 def _threshold_keyboard(data: dict) -> InlineKeyboardMarkup:
+    one_time = data.get("one_time", True)
     return threshold_keyboard(
         data["alert_type"],
-        one_time=data.get("one_time", True),
+        one_time=one_time,
         currency=data.get("currency", "USD"),
         native_symbol=data.get("native_symbol"),
+        metric=data.get("metric", "price"),
+        supports_market_cap=data.get("supports_market_cap", False),
+        direction=data.get("direction", AlertDirection.BOTH.value),
+        cooldown_seconds=None if one_time else data.get("cooldown_seconds", DEFAULT_COOLDOWN_SECONDS),
     )
 
 
@@ -488,6 +569,14 @@ async def _edit_message(
 ) -> None:
     try:
         await message.edit_text(text, reply_markup=reply_markup, parse_mode=parse_mode, disable_web_page_preview=True)
+    except TelegramBadRequest as exc:
+        if "message is not modified" not in str(exc):
+            raise
+
+
+async def _edit_reply_markup(message: Message, reply_markup: InlineKeyboardMarkup) -> None:
+    try:
+        await message.edit_reply_markup(reply_markup=reply_markup)
     except TelegramBadRequest as exc:
         if "message is not modified" not in str(exc):
             raise
@@ -556,39 +645,19 @@ async def _show_examples_then_menu(message: Message, *, edit_previous: bool) -> 
     )
 
 
-def _wizard_repeat(data: dict) -> bool | None:
-    if not str(data.get("alert_type", "")).startswith("mcap_"):
-        return None
-    return not data.get("one_time", True)
-
-
-def _parsed_threshold(alert_type: str, threshold: Decimal, currency: str = "USD") -> ParsedAlertCommand:
+def _parsed_threshold(data: dict, threshold: Decimal, currency: str = "USD") -> ParsedAlertCommand:
+    if data["alert_type"] == "percent":
+        alert_type = AlertType.PERCENT_CHANGE
+        direction = AlertDirection(data.get("direction", AlertDirection.BOTH.value))
+    else:
+        above = data["alert_type"] == "above"
+        alert_type = threshold_alert_type(above=above, market_cap=data.get("metric") == "mcap")
+        direction = AlertDirection.UP if above else AlertDirection.DOWN
     return ParsedAlertCommand(
         query="",
         asset_type_hint=None,
         threshold_currency=currency,
-        alert_type={
-            "percent": AlertType.PERCENT_CHANGE,
-            "above": AlertType.PRICE_ABOVE,
-            "below": AlertType.PRICE_BELOW,
-            "mcap_above": AlertType.MCAP_ABOVE,
-            "mcap_below": AlertType.MCAP_BELOW,
-        }[alert_type],
+        alert_type=alert_type,
         threshold_value=threshold,
-        direction={
-            "percent": AlertDirection.BOTH,
-            "above": AlertDirection.UP,
-            "below": AlertDirection.DOWN,
-            "mcap_above": AlertDirection.UP,
-            "mcap_below": AlertDirection.DOWN,
-        }[alert_type],
+        direction=direction,
     )
-
-
-def _candidate_display(candidate) -> str:
-    parts = [candidate.name or candidate.symbol]
-    if candidate.chain:
-        parts.append(candidate.chain)
-    if price := candidate.metadata.get("price_usd"):
-        parts.append(f"${price}")
-    return " - ".join(parts)

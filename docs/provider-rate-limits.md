@@ -56,13 +56,14 @@ Source: [API keys](https://docs.opensea.io/reference/api-keys), [API overview](h
 
 Not verified. The public API was sunset and only works with a pre-existing working key. Treat it as optional.
 
-## Capacity at the current 45-second refresh interval
+## Load at the 10-second refresh interval
 
-| Provider | Today (1 request per asset) | With batching |
+| Provider | Requests per refresh | Per minute with 200 watched assets |
 |---|---|---|
-| Binance | ~200 CEX assets before 429 | unlimited, weight 4 per tick |
-| DexScreener | ~225 tokens, minus search traffic | ~6700 tokens |
-| OpenSea free | ~7 collections | ~100 collections at a 5-minute NFT interval |
+| Binance | 1 per 20 pairs, weight 2 | 60 requests, 120 weight of 6000 |
+| DexScreener | 1 per 30 tokens on the same chain | up to ~90 of the 240 budget, worst case spread across chains |
+| Hyperliquid | 2 (spot and perps), reused for 2 seconds | 12 of the 40 budget |
+| OpenSea | unchanged, NFT floors refresh every 5 minutes | |
 
 ## Client-side budgets
 
@@ -74,6 +75,7 @@ The worker never sends at the published limit. Defaults live in `app/core/config
 | `CCXT_MARKETS_TTL_SECONDS` | 3600 | `exchangeInfo` costs 20, so markets are cached |
 | `DEXSCREENER_REQUESTS_PER_MINUTE` | 240 | 300/min shared with search |
 | `HYPERLIQUID_REQUESTS_PER_MINUTE` | 40 | 1200 weight/min; every request costs 20, so 60/min |
+| `PRICE_REFRESH_INTERVAL_SECONDS` | 10 | token and CEX refresh cadence |
 | `OPENSEA_READS_PER_HOUR` | 540 | 600/h on a free key |
 | `NFT_REFRESH_INTERVAL_SECONDS` | 300 | keeps ~100 collections inside the OpenSea budget |
 | `SEARCH_CACHE_SECONDS` | 120 | repeated user searches do not hit providers |

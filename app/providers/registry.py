@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import time
@@ -38,13 +39,17 @@ class ProviderRegistry:
 
         results: list[AssetCandidate] = []
         errors: list[Exception] = []
-        for provider in self.providers:
-            try:
-                results.extend(await provider.search_assets(query, nft=nft))
-            except Exception as exc:
-                logger.warning("Provider search failed; provider=%s nft=%s error=%r", provider.name, nft, exc)
-                errors.append(exc)
+        outcomes = await asyncio.gather(
+            *(provider.search_assets(query, nft=nft) for provider in self.providers), return_exceptions=True
+        )
+        for provider, outcome in zip(self.providers, outcomes, strict=True):
+            if isinstance(outcome, BaseException):
+                if not isinstance(outcome, Exception):
+                    raise outcome
+                logger.warning("Provider search failed; provider=%s nft=%s error=%r", provider.name, nft, outcome)
+                errors.append(outcome)
                 continue
+            results.extend(outcome)
         if nft and not results and errors:
             raise errors[0]
         results = rank_candidates(results, query)[:MAX_SEARCH_RESULTS]
