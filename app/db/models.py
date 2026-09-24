@@ -52,7 +52,7 @@ class User(Base, TimestampMixin):
             name="ck_users_timezone_offset_minutes",
         ),
         CheckConstraint(
-            "coin_links <@ ARRAY['tradingview', 'dexscreener', 'gmgn', 'fomo', 'coinmarketcap', 'explorer']::varchar[]",
+            "coin_links <@ ARRAY['tradingview', 'dexscreener', 'gmgn', 'fomo', 'coinmarketcap', 'explorer', 'pons']::varchar[]",
             name="ck_users_coin_links",
         ),
     )

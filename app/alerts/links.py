@@ -19,6 +19,7 @@ GMGN_CHAINS = {
     "solana": "sol",
 }
 FOMO_CHAINS = {"base", "bsc", "ethereum", "monad", "robinhood", "solana"}
+PONS_CHAINS = {"robinhood"}
 EXPLORERS = {
     "arbitrum": ("arbiscan", "Arbiscan", "https://arbiscan.io"),
     "avalanche": ("snowscan", "Snowscan", "https://snowscan.xyz"),
@@ -51,6 +52,8 @@ def build_asset_links(asset: Asset) -> dict[str, str]:
         links.setdefault("coinmarketcap", f"https://coinmarketcap.com/search/?q={quote_plus(address)}")
         if explorer := EXPLORERS.get(chain):
             links.setdefault("explorer", f"{explorer[2]}/token/{address}")
+        if chain in PONS_CHAINS:
+            links.setdefault("pons", f"https://www.ponsfamily.com/launchpad/{address}")
 
     return links
 
@@ -63,6 +66,7 @@ LINK_LABELS = {
     "gmgn": "GMGN",
     "hyperliquid": "Hyperliquid",
     "opensea": "OpenSea",
+    "pons": "Pons",
     "reservoir": "Reservoir",
     "tradingview": "TradingView",
     "website": "Website",

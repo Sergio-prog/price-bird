@@ -79,3 +79,15 @@ def test_explorer_link_uses_chain_specific_scan() -> None:
     assert format_links({"explorer": links["explorer"]}, "robinhood") == (
         '<tg-emoji emoji-id="6021610467582025589">🔍</tg-emoji> <a href="https://robin.etherscan.io/token/0xabc">Etherscan</a>'
     )
+
+
+def test_pons_launchpad_link_is_robinhood_only() -> None:
+    asset = Asset()
+    asset.chain = "robinhood"
+    asset.contract_address = "0x39dBED3a2bd333467115dE45665cC57F813C4571"
+
+    assert build_asset_links(asset)["pons"] == (
+        "https://www.ponsfamily.com/launchpad/0x39dBED3a2bd333467115dE45665cC57F813C4571"
+    )
+    asset.chain = "base"
+    assert "pons" not in build_asset_links(asset)

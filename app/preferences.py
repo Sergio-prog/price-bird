@@ -9,6 +9,7 @@ COIN_LINKS = {
     "fomo": "Fomo Trade",
     "coinmarketcap": "CoinMarketCap",
     "explorer": "Explorer",
+    "pons": "Pons",
 }
 DEFAULT_COIN_LINKS = ("dexscreener",)
 DEFAULT_QUIET_HOURS = (22, 7)
