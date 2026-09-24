@@ -214,6 +214,7 @@ alert-not-editable = Alert no longer editable.
 alert-deleted-toast = Deleted
 clear-expiry-before-resume = Clear the expiry before resuming.
 field-market = 🏦 Market: { $value }
+field-source = 🛰 Source: { $value }
 field-status = Status: { $value }
 field-mode = 🔁 Mode: { $value }
 field-threshold = 🎯 Threshold: { $value }
@@ -280,40 +281,43 @@ error-url-public = Webhook addresses must be public.
 
 settings-private-only = Open a private chat with Price Bird to manage settings.
 settings-text =
-    Delivery settings
+    ⚙️ <b>Settings</b>
 
-    Turn Price Bird notifications on or off. Set your timezone, then choose quiet hours for silent alerts. Choose the coin link included in token alerts. Turning notifications off cancels pending Telegram deliveries. Alerts keep evaluating. Pause individual alerts from /alerts.
-settings-text-connections =
-    Delivery settings
+    🔔 Notifications: <b>{ $bird }</b>
+    🌍 Timezone: <b>{ $timezone }</b>
+    🌙 Quiet hours: <b>{ $quiet }</b>
+    🔗 Coin links: { $links }
+    🌐 Language: <b>{ $language }</b>
 
-    Turn Price Bird notifications on or off. Set your timezone, then choose quiet hours for silent alerts. Choose the coin link included in token alerts. Alerts keep evaluating. Pause individual alerts from /alerts.
-
-    Choose where alerts are sent. Turn on Price Bird, a connected app, or both. Turning off a destination cancels its pending deliveries.
+    <i>Alerts keep evaluating while notifications are off. Pause single alerts in /alerts.</i>
+settings-destinations-hint = 📡 <i>Choose where alerts go: Price Bird, connected apps, or both. Turning a destination off cancels its pending deliveries.</i>
 settings-trenchbook-hint = <a href="{ $url }">Trenchbook</a> uses your same Telegram account; start its bot first.
-settings-bird = Price Bird notifications: { $state }
-settings-timezone = Timezone: { $timezone }
-settings-quiet-hours = Quiet hours: { $value }
-settings-coin-link = Coin link: { $provider }
-settings-language = 🌐 Language: { $language }
-settings-connection = { $name }: { $state }
-settings-connect = Connect { $name }
-settings-add-webhook = Add custom webhook
+settings-bird = 🔔 Notifications: { $state }
+settings-timezone = 🌍 { $timezone }
+settings-quiet-hours = 🌙 Quiet hours: { $value }
+settings-coin-links = 🔗 Coin links: { $value }
+settings-language = 🌐 { $language }
+settings-connection = 🔌 { $name }: { $state }
+settings-connect = ➕ Connect { $name }
+settings-add-webhook = 🪝 Add custom webhook
 state-on = on
 state-off = off
-language-prompt = Choose your language:
+language-prompt = 🌐 Choose your language:
 quiet-hours-text =
-    Quiet hours: { $value }
+    🌙 <b>Quiet hours:</b> { $value }
     Price Bird alerts still arrive, but without sound.
 quiet-from = from { $time }
 quiet-to = to { $time }
-quiet-turn-off = Turn off
-quiet-turn-on = Turn on 22:00-07:00
+quiet-turn-off = 🔔 Turn off
+quiet-turn-on = 🌙 Turn on 22:00-07:00
 timezone-text =
-    Timezone: { $timezone }
-    Quiet hours use this local time. Fixed UTC offsets do not change for daylight saving time.
-coin-link-text =
-    Coin link: { $provider }
-    This link is included in token alerts when the provider supports the asset.
+    🌍 <b>Timezone:</b> { $timezone }
+    Quiet hours use this local time. Fixed UTC offsets don't follow daylight saving time.
+coin-links-text =
+    🔗 <b>Coin links:</b> { $links }
+    Pick the links shown under each alert. If none of them support an asset, its source link is shown instead.
+coin-links-none = hidden
+button-coin-links-none = 🚫 Hide all links
 invalid-timezone-setting = Invalid timezone setting.
 invalid-quiet-hours-setting = Invalid quiet-hours setting.
 invalid-coin-link = Invalid coin link.
@@ -341,16 +345,16 @@ new-signing-secret =
     { $secret }
 enable-connection-first = Enable this connection first.
 delivery-already-pending = Delivery already pending.
-connection-host = Host: { $host }
+connection-host = 🌐 Host: { $host }
 host-unavailable = unavailable
-connection-notifications = Notifications: { $state }
-connection-last-delivery = Last delivery: { $status }
-button-enable = Enable
-button-disable = Disable
-button-send-test = Send test
-button-retry-failure = Retry last failure
-button-rotate-secret = Rotate signing secret
-button-disconnect = Disconnect
+connection-notifications = 🔔 Notifications: { $state }
+connection-last-delivery = 📬 Last delivery: { $status }
+button-enable = ▶️ Enable
+button-disable = ⏸ Disable
+button-send-test = 🧪 Send test
+button-retry-failure = 🔁 Retry last failure
+button-rotate-secret = 🔑 Rotate signing secret
+button-disconnect = 🔌 Disconnect
 
 ## Notifications
 
@@ -360,8 +364,6 @@ notification-price = 💵 <b>Price:</b> { $price }
 notification-floor = 🖼 <b>Floor price:</b> { $native } { $symbol } ({ $usd })
 notification-market-cap = 📊 <b>Market cap:</b> { $value }
 notification-dex = 🏦 <b>DEX:</b> { $dex }
-notification-source = 🛰 <b>Source:</b> { $source }
-notification-links = 🔗 <b>Links:</b> { $links }
 notification-note = 📝 <b>Note:</b> { $note }
 rule-percent-both = { $threshold } move up or down
 rule-percent-up = { $threshold } move up

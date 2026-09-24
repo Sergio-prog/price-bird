@@ -9,7 +9,7 @@
 5. Set `BOT_MODE=webhook`, use an HTTPS origin in `WEBHOOK_BASE_URL`, set a random `WEBHOOK_SECRET`, and keep the app port bound to `127.0.0.1` behind the reverse proxy. The app rejects an incomplete webhook configuration at startup.
 6. Set `PUBLIC_ACCESS_ENABLED=true` only when registration should open. Suspended users stay suspended.
 7. Keep `PUBLIC_INTEGRATIONS_ENABLED=false` and `PUBLIC_CUSTOM_WEBHOOKS_ENABLED=false`. Admins retain access to both.
-8. Confirm a regular user can set their timezone, quiet hours, and preferred coin link without gaining access to connected apps or custom webhooks.
+8. Confirm a regular user can set their timezone, quiet hours, and coin links without gaining access to connected apps or custom webhooks.
 9. Run `uv run price-alert-cli sync-commands` and `uv run price-alert-cli sync-profile`. The second command publishes the name, description, bio, and 512 x 512 profile photo.
 10. In BotFather, upload `assets/brand/price-bird-description-banner.png` as the description picture. Telegram's Bot API does not expose this field.
 11. Disable group joins in BotFather unless group support is intentionally added and tested.

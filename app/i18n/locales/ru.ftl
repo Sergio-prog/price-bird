@@ -218,6 +218,7 @@ alert-not-editable = Алерт больше нельзя редактирова
 alert-deleted-toast = Удалено
 clear-expiry-before-resume = Сначала убери срок действия, потом возобнови.
 field-market = 🏦 Рынок: { $value }
+field-source = 🛰 Источник: { $value }
 field-status = Статус: { $value }
 field-mode = 🔁 Режим: { $value }
 field-threshold = 🎯 Порог: { $value }
@@ -284,40 +285,43 @@ error-url-public = Адрес вебхука должен быть публич�
 
 settings-private-only = Открой личный чат с Price Bird, чтобы управлять настройками.
 settings-text =
-    Настройки доставки
+    ⚙️ <b>Настройки</b>
 
-    Включай и выключай уведомления Price Bird. Установи свой часовой пояс, затем выбери часы тишины для беззвучных алертов. Выбери ссылку на монету для токен-алертов. При выключении уведомлений отменяются ожидающие отправки в Telegram. Алерты продолжают проверяться. Отдельные алерты можно поставить на паузу в /alerts.
-settings-text-connections =
-    Настройки доставки
+    🔔 Уведомления: <b>{ $bird }</b>
+    🌍 Часовой пояс: <b>{ $timezone }</b>
+    🌙 Тихие часы: <b>{ $quiet }</b>
+    🔗 Ссылки на монету: { $links }
+    🌐 Язык: <b>{ $language }</b>
 
-    Включай и выключай уведомления Price Bird. Установи свой часовой пояс, затем выбери часы тишины для беззвучных алертов. Выбери ссылку на монету для токен-алертов. Алерты продолжают проверяться. Отдельные алерты можно поставить на паузу в /alerts.
-
-    Выбери, куда отправлять алерты. Включи Price Bird, подключённое приложение или оба варианта. При выключении канала доставки отменяются его ожидающие отправки.
+    <i>Алерты проверяются и при выключенных уведомлениях. Отдельные алерты можно поставить на паузу в /alerts.</i>
+settings-destinations-hint = 📡 <i>Выбери, куда отправлять алерты: Price Bird, подключённые приложения или оба. Выключение получателя отменяет его доставки в очереди.</i>
 settings-trenchbook-hint = <a href="{ $url }">Trenchbook</a> использует тот же аккаунт Telegram; сначала запусти его бота.
-settings-bird = Уведомления Price Bird: { $state }
-settings-timezone = Часовой пояс: { $timezone }
-settings-quiet-hours = Часы тишины: { $value }
-settings-coin-link = Ссылка на монету: { $provider }
-settings-language = 🌐 Язык: { $language }
-settings-connection = { $name }: { $state }
-settings-connect = Подключить { $name }
-settings-add-webhook = Добавить свой вебхук
+settings-bird = 🔔 Уведомления: { $state }
+settings-timezone = 🌍 { $timezone }
+settings-quiet-hours = 🌙 Тихие часы: { $value }
+settings-coin-links = 🔗 Ссылки: { $value }
+settings-language = 🌐 { $language }
+settings-connection = 🔌 { $name }: { $state }
+settings-connect = ➕ Подключить { $name }
+settings-add-webhook = 🪝 Добавить свой вебхук
 state-on = вкл
 state-off = выкл
-language-prompt = Выбери язык:
+language-prompt = 🌐 Выбери язык:
 quiet-hours-text =
-    Часы тишины: { $value }
-    Алерты Price Bird будут приходить без звука.
+    🌙 <b>Тихие часы:</b> { $value }
+    Алерты Price Bird будут приходить, но без звука.
 quiet-from = с { $time }
 quiet-to = до { $time }
-quiet-turn-off = Выключить
-quiet-turn-on = Включить 22:00-07:00
+quiet-turn-off = 🔔 Выключить
+quiet-turn-on = 🌙 Включить 22:00-07:00
 timezone-text =
-    Часовой пояс: { $timezone }
-    Часы тишины используют это местное время. Фиксированное смещение UTC не переходит автоматически на летнее время.
-coin-link-text =
-    Ссылка на монету: { $provider }
-    Эта ссылка добавляется в токен-алерты, когда сервис поддерживает актив.
+    🌍 <b>Часовой пояс:</b> { $timezone }
+    Тихие часы считаются по этому местному времени. Фиксированное смещение UTC не меняется при переходе на летнее время.
+coin-links-text =
+    🔗 <b>Ссылки на монету:</b> { $links }
+    Выбери ссылки под каждым алертом. Если ни одна не поддерживает актив, покажем ссылку на источник.
+coin-links-none = скрыты
+button-coin-links-none = 🚫 Скрыть все ссылки
 invalid-timezone-setting = Некорректная настройка часового пояса.
 invalid-quiet-hours-setting = Некорректная настройка часов тишины.
 invalid-coin-link = Некорректная ссылка на монету.
@@ -345,16 +349,16 @@ new-signing-secret =
     { $secret }
 enable-connection-first = Сначала включи это подключение.
 delivery-already-pending = Доставка уже выполняется.
-connection-host = Хост: { $host }
+connection-host = 🌐 Хост: { $host }
 host-unavailable = недоступен
-connection-notifications = Уведомления: { $state }
-connection-last-delivery = Последняя доставка: { $status }
-button-enable = Включить
-button-disable = Выключить
-button-send-test = Тест
-button-retry-failure = Повторить попытку
-button-rotate-secret = Сменить секрет подписи
-button-disconnect = Отключить
+connection-notifications = 🔔 Уведомления: { $state }
+connection-last-delivery = 📬 Последняя доставка: { $status }
+button-enable = ▶️ Включить
+button-disable = ⏸ Выключить
+button-send-test = 🧪 Отправить тест
+button-retry-failure = 🔁 Повторить последнюю ошибку
+button-rotate-secret = 🔑 Обновить секрет подписи
+button-disconnect = 🔌 Отключить
 
 ## Notifications
 
@@ -364,8 +368,6 @@ notification-price = 💵 <b>Цена:</b> { $price }
 notification-floor = 🖼 <b>Флор:</b> { $native } { $symbol } ({ $usd })
 notification-market-cap = 📊 <b>Капитализация:</b> { $value }
 notification-dex = 🏦 <b>DEX:</b> { $dex }
-notification-source = 🛰 <b>Источник:</b> { $source }
-notification-links = 🔗 <b>Ссылки:</b> { $links }
 notification-note = 📝 <b>Заметка:</b> { $note }
 rule-percent-both = Изменение { $threshold } в любую сторону
 rule-percent-up = Рост на { $threshold }

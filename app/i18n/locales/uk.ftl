@@ -218,6 +218,7 @@ alert-not-editable = Алерт більше не можна редагуват�
 alert-deleted-toast = Видалено
 clear-expiry-before-resume = Прибери термін дії перед відновленням.
 field-market = 🏦 Ринок: { $value }
+field-source = 🛰 Джерело: { $value }
 field-status = Статус: { $value }
 field-mode = 🔁 Режим: { $value }
 field-threshold = 🎯 Поріг: { $value }
@@ -284,40 +285,43 @@ error-url-public = Адреса вебхука має бути публічно�
 
 settings-private-only = Відкрий приватний чат із Price Bird, щоб керувати налаштуваннями.
 settings-text =
-    Налаштування доставки
+    ⚙️ <b>Налаштування</b>
 
-    Вмикай або вимикай сповіщення Price Bird. Встанови свій часовий пояс, а потім обери години тиші для беззвучних алертів. Обери посилання на монету для токен-алертів. Вимкнення сповіщень скасовує заплановані доставки в Telegram. Алерти продовжують перевірятися. Постав окремі алерти на паузу через /alerts.
-settings-text-connections =
-    Налаштування доставки
+    🔔 Сповіщення: <b>{ $bird }</b>
+    🌍 Часовий пояс: <b>{ $timezone }</b>
+    🌙 Години тиші: <b>{ $quiet }</b>
+    🔗 Посилання на монету: { $links }
+    🌐 Мова: <b>{ $language }</b>
 
-    Вмикай або вимикай сповіщення Price Bird. Встанови свій часовий пояс, а потім обери години тиші для беззвучних алертів. Обери посилання на монету для токен-алертів. Алерти продовжують перевірятися. Постав окремі алерти на паузу через /alerts.
-
-    Обери, куди надсилати алерти. Увімкни Price Bird, підключений застосунок або обидва варіанти. Вимкнення напрямку скасовує його заплановані доставки.
+    <i>Алерти перевіряються й коли сповіщення вимкнені. Окремі алерти можна призупинити в /alerts.</i>
+settings-destinations-hint = 📡 <i>Обери, куди надсилати алерти: Price Bird, підключені застосунки або обидва. Вимкнення отримувача скасовує його доставки в черзі.</i>
 settings-trenchbook-hint = <a href="{ $url }">Trenchbook</a> використовує той самий акаунт Telegram; спершу запусти його бота.
-settings-bird = Сповіщення Price Bird: { $state }
-settings-timezone = Часовий пояс: { $timezone }
-settings-quiet-hours = Години тиші: { $value }
-settings-coin-link = Посилання на монету: { $provider }
-settings-language = 🌐 Мова: { $language }
-settings-connection = { $name }: { $state }
-settings-connect = Підключити { $name }
-settings-add-webhook = Додати власний вебхук
+settings-bird = 🔔 Сповіщення: { $state }
+settings-timezone = 🌍 { $timezone }
+settings-quiet-hours = 🌙 Години тиші: { $value }
+settings-coin-links = 🔗 Посилання: { $value }
+settings-language = 🌐 { $language }
+settings-connection = 🔌 { $name }: { $state }
+settings-connect = ➕ Підключити { $name }
+settings-add-webhook = 🪝 Додати власний вебхук
 state-on = увімкнено
 state-off = вимкнено
-language-prompt = Обери мову:
+language-prompt = 🌐 Обери мову:
 quiet-hours-text =
-    Години тиші: { $value }
-    Алерти Price Bird надходитимуть без звуку.
+    🌙 <b>Години тиші:</b> { $value }
+    Алерти Price Bird приходитимуть, але без звуку.
 quiet-from = від { $time }
 quiet-to = до { $time }
-quiet-turn-off = Вимкнути
-quiet-turn-on = Увімкнути 22:00-07:00
+quiet-turn-off = 🔔 Вимкнути
+quiet-turn-on = 🌙 Увімкнути 22:00-07:00
 timezone-text =
-    Часовий пояс: { $timezone }
-    Години тиші використовують цей місцевий час. Фіксований зсув UTC не переходить автоматично на літній час.
-coin-link-text =
-    Посилання на монету: { $provider }
-    Це посилання додається до токен-алертів, коли сервіс підтримує актив.
+    🌍 <b>Часовий пояс:</b> { $timezone }
+    Години тиші рахуються за цим місцевим часом. Фіксований зсув UTC не змінюється під час переходу на літній час.
+coin-links-text =
+    🔗 <b>Посилання на монету:</b> { $links }
+    Обери посилання під кожним алертом. Якщо жодне не підтримує актив, покажемо посилання на джерело.
+coin-links-none = приховано
+button-coin-links-none = 🚫 Приховати всі посилання
 invalid-timezone-setting = Некоректне налаштування часового поясу.
 invalid-quiet-hours-setting = Некоректне налаштування годин тиші.
 invalid-coin-link = Некоректне посилання на монету.
@@ -345,16 +349,16 @@ new-signing-secret =
     { $secret }
 enable-connection-first = Спершу увімкни це підключення.
 delivery-already-pending = Доставка вже очікує.
-connection-host = Хост: { $host }
+connection-host = 🌐 Хост: { $host }
 host-unavailable = недоступний
-connection-notifications = Сповіщення: { $state }
-connection-last-delivery = Остання доставка: { $status }
-button-enable = Увімкнути
-button-disable = Вимкнути
-button-send-test = Надіслати тест
-button-retry-failure = Повторити останню помилку
-button-rotate-secret = Оновити секрет підпису
-button-disconnect = Відключити
+connection-notifications = 🔔 Сповіщення: { $state }
+connection-last-delivery = 📬 Остання доставка: { $status }
+button-enable = ▶️ Увімкнути
+button-disable = ⏸ Вимкнути
+button-send-test = 🧪 Надіслати тест
+button-retry-failure = 🔁 Повторити останню помилку
+button-rotate-secret = 🔑 Оновити секрет підпису
+button-disconnect = 🔌 Відключити
 
 ## Notifications
 
@@ -364,8 +368,6 @@ notification-price = 💵 <b>Ціна:</b> { $price }
 notification-floor = 🖼 <b>Флор:</b> { $native } { $symbol } ({ $usd })
 notification-market-cap = 📊 <b>Капіталізація:</b> { $value }
 notification-dex = 🏦 <b>DEX:</b> { $dex }
-notification-source = 🛰 <b>Джерело:</b> { $source }
-notification-links = 🔗 <b>Посилання:</b> { $links }
 notification-note = 📝 <b>Нотатка:</b> { $note }
 rule-percent-both = Зміна { $threshold } вгору чи вниз
 rule-percent-up = Зміна { $threshold } вгору

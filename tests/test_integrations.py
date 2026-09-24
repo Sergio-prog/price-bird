@@ -93,14 +93,16 @@ async def test_public_settings_hide_private_destinations(monkeypatch):
     text, markup = await settings_view(session, user)
 
     assert "Trenchbook" not in text
+    assert "🔗 Coin links: <tg-emoji" in text
     assert [button.text for row in markup.inline_keyboard for button in row] == [
-        "Price Bird notifications: on",
-        "Timezone: UTC+00:00",
-        "Quiet hours: off",
-        "Coin link: DexScreener",
-        "🌐 Language: English",
-        "↩️ Back",
+        "🔔 Notifications: on",
+        "🌙 Quiet hours: off",
+        "🔗 Coin links: DEX",
+        "🌍 UTC+00:00",
+        "🌐 English",
+        "↩️ Back to menu",
     ]
+    assert markup.inline_keyboard[0][0].style == "success"
     session.scalars.assert_not_called()
 
 
@@ -127,7 +129,7 @@ def test_notification_preference_views() -> None:
         quiet_hours_start=23,
         quiet_hours_end=8,
         timezone_offset_minutes=120,
-        coin_link="gmgn",
+        coin_links=["gmgn"],
     )
 
     quiet_text, quiet_markup = quiet_hours_view(user)
@@ -136,10 +138,11 @@ def test_notification_preference_views() -> None:
 
     assert "23:00-08:00 (UTC+02:00)" in quiet_text
     assert [button.text for button in quiet_markup.inline_keyboard[0]] == ["-1h", "from 23:00", "+1h"]
-    assert timezone_text.startswith("Timezone: UTC+02:00")
+    assert timezone_text.startswith("🌍 <b>Timezone:</b> UTC+02:00")
     assert [button.text for button in timezone_markup.inline_keyboard[0]] == ["-1h", "UTC+02:00", "+1h"]
-    assert link_text.startswith("Coin link: GMGN")
-    assert "• GMGN" in [button.text for row in link_markup.inline_keyboard for button in row]
+    assert link_text.startswith("🔗 <b>Coin links:</b> 🐸 GMGN")
+    selected = [button.text for row in link_markup.inline_keyboard for button in row if button.style == "success"]
+    assert selected == ["✅ 🐸 GMGN"]
 
 
 @pytest.mark.asyncio
@@ -160,7 +163,7 @@ async def test_coin_link_callback_updates_user_and_edits_message(monkeypatch) ->
         bird_enabled=True,
         role="user",
         access_status="active",
-        coin_link="dexscreener",
+        coin_links=["dexscreener"],
         quiet_hours_start=None,
         quiet_hours_end=None,
         timezone_offset_minutes=0,
@@ -179,9 +182,15 @@ async def test_coin_link_callback_updates_user_and_edits_message(monkeypatch) ->
 
     await settings_handler.settings_callback(callback, state, session)
 
-    assert user.coin_link == "gmgn"
-    assert message.edits[0][0].startswith("Coin link: GMGN")
-    session.commit.assert_awaited_once()
+    assert user.coin_links == ["dexscreener", "gmgn"]
+    assert message.edits[0][0].startswith("🔗 <b>Coin links:</b> ")
+
+    callback.data = "settings:coinlink:none"
+    await settings_handler.settings_callback(callback, state, session)
+
+    assert user.coin_links == []
+    assert "Coin links:</b> hidden" in message.edits[1][0]
+    assert session.commit.await_count == 2
 
 
 @pytest.mark.asyncio
@@ -218,7 +227,7 @@ async def test_timezone_callback_updates_user_and_edits_message(monkeypatch) -> 
     await settings_handler.settings_callback(callback, state, session)
 
     assert user.timezone_offset_minutes == 180
-    assert message.edits[0][0].startswith("Timezone: UTC+03:00")
+    assert message.edits[0][0].startswith("🌍 <b>Timezone:</b> UTC+03:00")
     session.commit.assert_awaited_once()
 
 

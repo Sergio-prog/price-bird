@@ -17,6 +17,8 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.alerts.icons import icon, plain_icon, with_icon
+from app.alerts.links import LINK_LABELS
 from app.db.models import ConnectedApp, Delivery, IntegrationDefinition, User
 from app.db.repositories.users import get_user_by_telegram_id, has_bot_access
 from app.delivery.events import queue_test
@@ -28,17 +30,19 @@ from app.integrations.urls import validate_url
 from app.preferences import (
     COIN_LINKS,
     DEFAULT_QUIET_HOURS,
-    coin_link_key,
+    coin_link_keys,
     format_timezone,
     quiet_hours,
     shift_hour,
     shift_timezone_offset,
     timezone_offset_minutes,
+    toggle_coin_link,
 )
 
 router = Router(name="settings")
 TRENCHBOOK_BOT_URL = "https://t.me/trenches_fotex_bot"
 MAX_CONNECTIONS = 20
+NO_COIN_LINKS = "none"
 
 
 class ConnectionWizard(StatesGroup):
@@ -89,42 +93,67 @@ async def settings_view(session, user):
         )
     quiet = quiet_hours(user)
     offset = timezone_offset_minutes(user)
+    links = coin_link_keys(getattr(user, "coin_links", None))
+    language = LOCALE_NAMES[current_locale()]
     rows = [
-        [(t("settings-bird", state=_state_label(user.bird_enabled)), "settings:bird")],
-        [(t("settings-timezone", timezone=format_timezone(offset)), "settings:timezone")],
-        [(t("settings-quiet-hours", value=_quiet_label(quiet, offset)), "settings:quiet")],
+        [(t("settings-bird", state=_state_label(user.bird_enabled)), "settings:bird", _toggle_style(user.bird_enabled))],
+        [(t("settings-quiet-hours", value=_quiet_label(quiet, offset, compact=True)), "settings:quiet")],
+        [(t("settings-coin-links", value=_links_button_label(links)), "settings:coinlink")],
         [
-            (
-                t("settings-coin-link", provider=COIN_LINKS[coin_link_key(getattr(user, "coin_link", None))]),
-                "settings:coinlink",
-            )
+            (t("settings-timezone", timezone=format_timezone(offset)), "settings:timezone"),
+            (t("settings-language", language=language), "settings:language"),
         ],
-        [(t("settings-language", language=LOCALE_NAMES[current_locale()]), "settings:language")],
     ]
     rows += [
-        [(t("settings-connection", name=c.name, state=_state_label(c.enabled)), f"settings:view:{c.id}")] for c in connections
+        [
+            (
+                t("settings-connection", name=c.name, state=_state_label(c.enabled)),
+                f"settings:view:{c.id}",
+                _toggle_style(c.enabled),
+            )
+        ]
+        for c in connections
     ]
     connected_definition_ids = {connection.integration_definition_id for connection in connections}
     rows += [
-        [(t("settings-connect", name=definition.name), f"settings:connect:{definition.id}")]
+        [(t("settings-connect", name=definition.name), f"settings:connect:{definition.id}", "primary")]
         for definition in definitions
         if definition.id not in connected_definition_ids
     ]
     if can_use_custom_webhooks(user):
         rows.append([(t("settings-add-webhook"), "settings:add")])
-    rows.append([(t("button-back"), "wizard:cancel")])
+    rows.append([(t("button-back-to-menu"), "wizard:cancel")])
 
-    text = t("settings-text")
+    text = t(
+        "settings-text",
+        bird=_state_label(user.bird_enabled),
+        timezone=format_timezone(offset),
+        quiet=_quiet_label(quiet, offset),
+        links=_links_text(links),
+        language=language,
+    )
     if can_use_integrations(user) or can_use_custom_webhooks(user):
-        text = t("settings-text-connections")
+        text += "\n\n" + t("settings-destinations-hint")
     if can_use_integrations(user):
-        text += "\n\n" + t("settings-trenchbook-hint", url=TRENCHBOOK_BOT_URL)
+        text += "\n" + t("settings-trenchbook-hint", url=TRENCHBOOK_BOT_URL)
     return text, keyboard(rows)
+
+
+def _toggle_style(enabled: bool) -> str:
+    return "success" if enabled else "danger"
+
+
+def _links_text(keys: list[str]) -> str:
+    return "  ".join(with_icon(icon(key), LINK_LABELS[key]) for key in keys) or t("coin-links-none")
+
+
+def _links_button_label(keys: list[str]) -> str:
+    return ", ".join(LINK_LABELS[key] for key in keys) or t("coin-links-none")
 
 
 def language_view() -> tuple[str, Markup]:
     rows = [
-        [(f"{'✅ ' if locale == current_locale() else ''}{LOCALE_NAMES[locale]}", f"settings:language:{locale}")]
+        [_option(LOCALE_NAMES[locale], f"settings:language:{locale}", locale == current_locale())]
         for locale in SUPPORTED_LOCALES
     ]
     rows.append([(t("button-back"), "settings:open")])
@@ -135,8 +164,15 @@ def _clock(hour: int) -> str:
     return f"{hour:02}:00"
 
 
-def _quiet_label(hours: tuple[int, int] | None, offset_minutes: int) -> str:
-    return f"{_clock(hours[0])}-{_clock(hours[1])} ({format_timezone(offset_minutes)})" if hours else t("state-off")
+def _quiet_label(hours: tuple[int, int] | None, offset_minutes: int, *, compact: bool = False) -> str:
+    if not hours:
+        return t("state-off")
+    window = f"{_clock(hours[0])}-{_clock(hours[1])}"
+    return window if compact else f"{window} ({format_timezone(offset_minutes)})"
+
+
+def _option(label: str, data: str, selected: bool) -> tuple[str, str, str | None]:
+    return (f"✅ {label}" if selected else label, data, "success" if selected else None)
 
 
 def quiet_hours_view(user):
@@ -154,7 +190,9 @@ def quiet_hours_view(user):
             (t("quiet-to", time=_clock(shown[1])), "settings:quiet"),
             ("+1h", "settings:quiet:end:1"),
         ],
-        [(t("quiet-turn-off") if hours else t("quiet-turn-on"), "settings:quiet:toggle")],
+        [(t("quiet-turn-off"), "settings:quiet:toggle", "danger")]
+        if hours
+        else [(t("quiet-turn-on"), "settings:quiet:toggle", "success")],
         [(t("button-back"), "settings:open")],
     ]
     return t("quiet-hours-text", value=_quiet_label(hours, offset)), keyboard(rows)
@@ -170,10 +208,14 @@ def timezone_view(user):
 
 
 def coin_link_view(user):
-    selected = coin_link_key(getattr(user, "coin_link", None))
-    rows = [[(f"{'• ' if key == selected else ''}{label}", f"settings:coinlink:{key}")] for key, label in COIN_LINKS.items()]
+    selected = coin_link_keys(getattr(user, "coin_links", None))
+    rows = [
+        [_option(with_icon(plain_icon(key), label), f"settings:coinlink:{key}", key in selected)]
+        for key, label in COIN_LINKS.items()
+    ]
+    rows.append([_option(t("button-coin-links-none"), f"settings:coinlink:{NO_COIN_LINKS}", not selected)])
     rows.append([(t("button-back"), "settings:open")])
-    return t("coin-link-text", provider=COIN_LINKS[selected]), keyboard(rows)
+    return t("coin-links-text", links=_links_text(selected)), keyboard(rows)
 
 
 @router.message(Command("settings"))
@@ -269,8 +311,10 @@ async def settings_callback(callback: CallbackQuery, state: FSMContext, session:
         return
     if action == "coinlink":
         await session.refresh(user, with_for_update=True)
-        if len(parts) == 3 and parts[2] in COIN_LINKS:
-            user.coin_link = parts[2]
+        if len(parts) == 3 and parts[2] == NO_COIN_LINKS:
+            user.coin_links = []
+        elif len(parts) == 3 and parts[2] in COIN_LINKS:
+            user.coin_links = toggle_coin_link(getattr(user, "coin_links", None), parts[2])
         elif len(parts) != 2:
             await callback.answer(t("invalid-coin-link"))
             return
@@ -473,15 +517,22 @@ async def _connection_view(session: AsyncSession, connection: ConnectedApp) -> t
         status = escape(last.status) + (f" ({escape(last.last_error)})" if last.last_error else "")
         lines.append(t("connection-last-delivery", status=status))
     rows = [
-        [(t("button-disable" if connection.enabled else "button-enable"), f"settings:toggle:{connection.id}")],
         [
-            (t("button-send-test"), f"settings:test:{connection.id}"),
+            (t("button-disable"), f"settings:toggle:{connection.id}")
+            if connection.enabled
+            else (t("button-enable"), f"settings:toggle:{connection.id}", "success")
+        ],
+        [
+            (t("button-send-test"), f"settings:test:{connection.id}", "primary"),
             (t("button-retry-failure"), f"settings:retry:{connection.id}"),
         ],
     ]
     if connection.kind == "custom":
         rows.append([(t("button-rotate-secret"), f"settings:rotate:{connection.id}")])
-    rows += [[(t("button-disconnect"), f"settings:disconnect:{connection.id}")], [(t("button-back"), "settings:open")]]
+    rows += [
+        [(t("button-disconnect"), f"settings:disconnect:{connection.id}", "danger")],
+        [(t("button-back"), "settings:open")],
+    ]
     return "\n".join(lines), keyboard(rows)
 
 

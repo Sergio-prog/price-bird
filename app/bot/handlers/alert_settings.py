@@ -14,6 +14,7 @@ from sqlalchemy.orm import selectinload
 
 from app.alerts.formatting import format_decimal, format_direction, format_direction_arrows, format_threshold
 from app.alerts.icons import asset_icon, with_icon
+from app.alerts.links import format_source
 from app.alerts.parser import PERCENT_DIRECTIONS
 from app.alerts.service import MIN_COOLDOWN_SECONDS, MOVE_ALERT_TYPES, alert_currency, asset_kind_label, describe_alert
 from app.bot.handlers.alerts import alerts_message
@@ -22,7 +23,7 @@ from app.bot.keyboards import one_time_label
 from app.bot.states import AlertEdit
 from app.db import repositories as repo
 from app.db.enums import AlertStatus, AlertType
-from app.db.models import Alert
+from app.db.models import Alert, Asset
 from app.i18n import LocalizedError, t
 from app.utils.amounts import parse_amount, parse_percent, resolve_currency, split_market_cap_suffix
 from app.utils.currency import native_symbol_or_none
@@ -175,6 +176,7 @@ def alert_settings_view(alert: Alert) -> tuple[str, InlineKeyboardMarkup]:
     lines = [
         f"⚙️ <b>{escape(describe_alert(alert))}</b>",
         t("field-market", value=_market_label(asset)) if asset else None,
+        t("field-source", value=format_source(asset)) if getattr(asset, "provider", None) else None,
         "",
         t("field-status", value=t("status-active" if active else "status-paused")),
         t("field-mode", value=_mode_label(alert)),
@@ -212,7 +214,7 @@ async def _load_alert(session: AsyncSession, user_id: int, alert_id: int) -> Ale
     return await session.scalar(
         select(Alert)
         .where(Alert.id == alert_id, Alert.user_id == user_id, Alert.status.in_(EDITABLE_STATUSES))
-        .options(selectinload(Alert.asset))
+        .options(selectinload(Alert.asset).selectinload(Asset.links))
         .with_for_update(of=Alert)
     )
 

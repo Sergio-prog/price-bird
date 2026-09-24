@@ -6,6 +6,7 @@ import pytest
 
 from app.alerts.formatting import format_compact_usd, format_threshold
 from app.bot.handlers.alert_settings import MIN_COOLDOWN, MIN_EXPIRY, _next_option, _parse_bounded_duration, alert_settings_view
+from app.db.models import Asset
 from app.utils.durations import format_duration, parse_duration
 
 
@@ -125,3 +126,12 @@ def test_bounded_duration_limits() -> None:
         _parse_bounded_duration("30s", MIN_EXPIRY, timedelta(days=1))
     with pytest.raises(ValueError, match="at most 1d"):
         _parse_bounded_duration("2d", MIN_COOLDOWN, timedelta(days=1))
+
+
+def test_alert_settings_view_links_price_source() -> None:
+    asset = Asset(symbol="AGRIPPA", type="token", chain="robinhood", contract_address="0xabc", provider="dexscreener")
+
+    text, _ = alert_settings_view(_alert(asset=asset))
+
+    assert "🛰 Source: <tg-emoji" in text
+    assert '🦅</tg-emoji> <a href="https://dexscreener.com/robinhood/0xabc">DexScreener</a>' in text

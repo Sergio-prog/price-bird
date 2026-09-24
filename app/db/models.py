@@ -16,8 +16,9 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -51,8 +52,8 @@ class User(Base, TimestampMixin):
             name="ck_users_timezone_offset_minutes",
         ),
         CheckConstraint(
-            "coin_link IN ('tradingview', 'dexscreener', 'gmgn', 'fomo', 'coinmarketcap')",
-            name="ck_users_coin_link",
+            "coin_links <@ ARRAY['tradingview', 'dexscreener', 'gmgn', 'fomo', 'coinmarketcap']::varchar[]",
+            name="ck_users_coin_links",
         ),
     )
 
@@ -62,7 +63,9 @@ class User(Base, TimestampMixin):
     quiet_hours_start: Mapped[int | None] = mapped_column()
     quiet_hours_end: Mapped[int | None] = mapped_column()
     timezone_offset_minutes: Mapped[int] = mapped_column(default=0, server_default="0")
-    coin_link: Mapped[str] = mapped_column(String(32), default="dexscreener", server_default="dexscreener")
+    coin_links: Mapped[list[str]] = mapped_column(
+        ARRAY(String(32)), default=lambda: ["dexscreener"], server_default=text("'{dexscreener}'::varchar[]")
+    )
     username: Mapped[str | None] = mapped_column(String(255))
     first_name: Mapped[str | None] = mapped_column(String(255))
     last_name: Mapped[str | None] = mapped_column(String(255))

@@ -116,3 +116,8 @@ def dex_label(dex_id: str) -> str:
 
 def with_icon(key_icon: str, text: str) -> str:
     return f"{key_icon} {text}" if key_icon else text
+
+
+def plain_icon(key: str | None) -> str:
+    name = (key or "").lower()
+    return FALLBACK_EMOJI.get(ALIASES.get(name, name), "")

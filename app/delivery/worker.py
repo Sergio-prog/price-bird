@@ -20,7 +20,6 @@ from app.alerts.formatting import (
     format_decimal,
     format_percent,
     format_threshold,
-    venue_label,
 )
 from app.alerts.icons import asset_icon, dex_label, icon, with_icon
 from app.alerts.links import format_links
@@ -43,26 +42,21 @@ def render_payload(payload: dict) -> str:
         return t("notification-test")
     asset, observation, rule, trigger = payload["asset"], payload["observation"], payload["rule"], payload["trigger"]
     links = _safe_links(payload.get("links") or {})
-    source = observation["source"]
-    source_link = links.pop(source, None)
-    source_text = format_links({source: source_link}) if source_link else escape(_source_label(source, asset))
     heading = with_icon(
         asset_icon(asset.get("kind"), asset.get("chain"), asset.get("exchange")), f"<b>{escape(asset['symbol'])}</b>"
     )
     lines = [
-        f"{_trigger_emoji(trigger)} {heading} {_format_change(trigger)}",
+        f"{heading} {_format_change(trigger)}",
         "",
         t("notification-rule", rule=_format_rule(rule)),
         _format_observation(asset, observation),
         *_format_market_cap(observation),
         *_format_dex(asset),
-        "",
-        t("notification-source", source=source_text),
     ]
-    if links:
-        lines.append(t("notification-links", links=format_links(links)))
     if payload.get("note"):
         lines.append(t("notification-note", note=escape(payload["note"])))
+    if links:
+        lines += ["", format_links(links)]
     return "\n".join(lines)
 
 
@@ -131,19 +125,6 @@ def _format_decimal_value(value: str) -> str:
 
 def _safe_links(links: dict) -> dict[str, str]:
     return {str(name): str(url) for name, url in links.items() if isinstance(url, str) and urlsplit(url).scheme == "https"}
-
-
-def _source_label(source: str, asset: dict) -> str:
-    if source == "ccxt" and asset.get("exchange"):
-        return venue_label(asset["exchange"])
-    return {"dexscreener": "DexScreener", "opensea": "OpenSea"}.get(
-        source,
-        source.replace("_", " ").title(),
-    )
-
-
-def _trigger_emoji(trigger: dict) -> str:
-    return "🩸" if trigger.get("direction") == "down" else "🚀"
 
 
 def _format_dex(asset: dict) -> list[str]:

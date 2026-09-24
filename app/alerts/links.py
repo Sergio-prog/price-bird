@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import re
 from html import escape
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlsplit
 
+from app.alerts.formatting import venue_label
 from app.alerts.icons import icon, with_icon
 from app.db.enums import AssetType
 from app.db.models import Asset
@@ -41,25 +42,41 @@ def build_asset_links(asset: Asset) -> dict[str, str]:
     return links
 
 
+LINK_LABELS = {
+    "coinmarketcap": "CMC",
+    "dexscreener": "DEX",
+    "fomo": "Fomo",
+    "gmgn": "GMGN",
+    "hyperliquid": "Hyperliquid",
+    "opensea": "OpenSea",
+    "reservoir": "Reservoir",
+    "tradingview": "TradingView",
+    "website": "Website",
+}
+SOURCE_LABELS = {"dexscreener": "DexScreener", "opensea": "OpenSea", "hyperliquid": "Hyperliquid"}
+
+
 def format_links(links: dict[str, str]) -> str:
-    if not links:
-        return ""
-    return " | ".join(
+    return "  ".join(
         with_icon(icon(label), f'<a href="{escape(url, quote=True)}">{escape(_link_label(label))}</a>')
         for label, url in links.items()
     )
 
 
+def source_label(source: str, exchange: str | None = None) -> str:
+    if source == "ccxt" and exchange:
+        return venue_label(exchange)
+    return SOURCE_LABELS.get(source, source.replace("_", " ").title())
+
+
+def format_source(asset: Asset) -> str:
+    exchange = (asset.extra or {}).get("exchange")
+    label = escape(source_label(asset.provider, exchange))
+    url = build_asset_links(asset).get("tradingview" if asset.provider == "ccxt" else asset.provider)
+    if url and urlsplit(url).scheme == "https":
+        label = f'<a href="{escape(url, quote=True)}">{label}</a>'
+    return with_icon(icon(exchange if asset.provider == "ccxt" else asset.provider), label)
+
+
 def _link_label(label: str) -> str:
-    labels = {
-        "coinmarketcap": "CoinMarketCap",
-        "dexscreener": "DexScreener",
-        "fomo": "Fomo Trade",
-        "gmgn": "GMGN",
-        "hyperliquid": "Hyperliquid",
-        "opensea": "OpenSea",
-        "reservoir": "Reservoir",
-        "tradingview": "TradingView",
-        "website": "Website",
-    }
-    return labels.get(label, label.replace("_", " ").title())
+    return LINK_LABELS.get(label, label.replace("_", " ").title())

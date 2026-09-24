@@ -70,7 +70,7 @@ async def test_independent_destinations(bird, apps, expected):
 
 
 @pytest.mark.asyncio
-async def test_user_coin_link_is_included_with_source() -> None:
+async def test_user_coin_links_are_included_in_catalog_order() -> None:
     rows = []
     session = SimpleNamespace(add=rows.append, scalars=AsyncMock(return_value=[]))
     user = User(
@@ -79,7 +79,7 @@ async def test_user_coin_link_is_included_with_source() -> None:
         bird_enabled=True,
         role="admin",
         access_status="active",
-        coin_link="gmgn",
+        coin_links=["gmgn", "dexscreener"],
     )
     alert = Alert(
         id=2,
@@ -105,7 +105,7 @@ async def test_user_coin_link_is_included_with_source() -> None:
 async def test_cex_alert_falls_back_to_tradingview_link() -> None:
     rows = []
     session = SimpleNamespace(add=rows.append, scalars=AsyncMock(return_value=[]))
-    user = User(id=1, telegram_id=42, bird_enabled=True, role="admin", access_status="active", coin_link="dexscreener")
+    user = User(id=1, telegram_id=42, bird_enabled=True, role="admin", access_status="active", coin_links=["dexscreener"])
     alert = Alert(
         id=2,
         user_id=1,
@@ -122,6 +122,11 @@ async def test_cex_alert_falls_back_to_tradingview_link() -> None:
 
     assert rows[0].payload["links"] == {"tradingview": "https://www.tradingview.com/search/?query=NEARUSDT"}
     assert rows[0].payload["asset"]["exchange"] == "binance"
+
+    user.coin_links = []
+    await queue_event(session, event, alert, asset, PriceQuote(Decimal("2"), "ccxt", {}))
+
+    assert rows[1].payload["links"] == {}
 
 
 @pytest.mark.asyncio
@@ -292,7 +297,7 @@ async def test_private_integration_is_cancelled_for_non_admin(monkeypatch):
     assert statements[0].compile().params["status"] == "cancelled"
 
 
-def test_render_payload_formats_percent_alert_and_links_source():
+def test_render_payload_formats_percent_alert_and_links():
     message = render_payload(
         {
             "type": "alert.triggered",
@@ -320,13 +325,16 @@ def test_render_payload_formats_percent_alert_and_links_source():
         }
     )
 
-    assert message.startswith('🚀 <tg-emoji emoji-id="5917864617719111990">🟣</tg-emoji> <b>MEME</b> ↑ +11.45%\n\n')
+    assert message.startswith('<tg-emoji emoji-id="5917864617719111990">🟣</tg-emoji> <b>MEME</b> ↑ +11.45%\n\n')
     assert "<b>Rule:</b> 10% move up or down" in message
     assert "<b>Price:</b> $0.05829\n📊 <b>Market cap:</b> $1M\n\n" in message
     assert "Floor" not in message
     assert "Baseline" not in message
-    assert '🦅</tg-emoji> <a href="https://dexscreener.com/solana/token">DexScreener</a>' in message
-    assert '<b>Links:</b> 📈 <a href="https://www.tradingview.com/search/?query=MEME">TradingView</a>' in message
+    assert message.endswith(
+        '\n\n<tg-emoji emoji-id="5917923733648973619">🦅</tg-emoji> <a href="https://dexscreener.com/solana/token">DEX</a>'
+        '  📈 <a href="https://www.tradingview.com/search/?query=MEME">TradingView</a>'
+    )
+    assert "Source" not in message
 
 
 @pytest.mark.asyncio
@@ -379,11 +387,11 @@ def test_render_payload_rounds_noisy_nft_floor_and_marks_direction():
         }
     )
 
-    assert message.startswith('🩸 <tg-emoji emoji-id="5915524517672787258">💎</tg-emoji> <b>MILADY</b> ↓ -5.31%\n\n')
+    assert message.startswith('<tg-emoji emoji-id="5915524517672787258">💎</tg-emoji> <b>MILADY</b> ↓ -5.31%\n\n')
     assert "<b>Rule:</b> 5% move up or down" in message
     assert "<b>Floor price:</b> 0.9498 ETH ($2,477.03)\n📊 <b>Market cap:</b> $1.23B\n\n" in message
     assert "Baseline" not in message
-    assert "Links:" not in message
+    assert message.endswith('🌊 <a href="https://opensea.io/collection/milady">OpenSea</a>')
 
 
 def test_render_payload_shows_compact_market_cap():
@@ -423,7 +431,6 @@ def test_render_payload_names_cex_exchange_and_dex():
 
     message = render_payload(payload)
 
-    assert "<b>Source:</b> Binance" in message
     assert "TradingView</a>" in message
     assert "DEX" not in message
 

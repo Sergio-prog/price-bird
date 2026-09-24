@@ -113,7 +113,7 @@ The last command removes the override and restores the default.
 
 ## Connected apps and notification settings
 
-Price Bird is the only place to create and manage alerts. `/settings` controls Telegram delivery, a per-user fixed UTC offset, local quiet hours, and the preferred coin link for every active user. Quiet hours default to off and deliver alerts without sound rather than delaying them. Coin links can use TradingView, DexScreener, GMGN, Fomo Trade, or CoinMarketCap. The provider source link remains in the alert when it differs from the preferred link.
+Price Bird is the only place to create and manage alerts. `/settings` controls Telegram delivery, a per-user fixed UTC offset, local quiet hours, and the coin links for every active user. Quiet hours default to off and deliver alerts without sound rather than delaying them. Users pick any mix of TradingView, DexScreener, GMGN, Fomo Trade, and CoinMarketCap links, or hide them all. When none of the picked links supports an asset, the price source link is shown instead. The price source itself is shown in each alert's settings.
 
 Built-in integrations and custom webhooks are admin-only by default. Set `PUBLIC_INTEGRATIONS_ENABLED=true` or `PUBLIC_CUSTOM_WEBHOOKS_ENABLED=true` only when those features are ready for every active user. The delivery worker checks the same policy before every send, so hidden or old connections cannot bypass it. Disabling a destination cancels its pending deliveries; a request already in flight can still finish. Alert evaluation continues. `/alerts` lets you pause individual alerts, edit their threshold/note, change percentage direction, choose once or repeating crossings, set cooldown, or expire an alert in seven days.
 

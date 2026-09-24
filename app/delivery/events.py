@@ -12,20 +12,27 @@ from app.db.enums import AssetType
 from app.db.models import Alert, AlertEvent, Asset, ConnectedApp, Delivery
 from app.integrations.access import can_use_connection
 from app.integrations.catalog import TRENCHBOOK_SLUG
-from app.preferences import coin_link_key
+from app.preferences import coin_link_keys
+
+
+def notification_links(asset: Asset, source: str, selected: list[str]) -> dict[str, str]:
+    if not selected:
+        return {}
+    available = {name: url for name, url in build_asset_links(asset).items() if _usable_url(url)}
+    links = {name: available[name] for name in selected if name in available}
+    if links:
+        return links
+    fallbacks = [source] if asset.type == AssetType.NFT_COLLECTION.value else [source, "tradingview"]
+    return next(({name: available[name]} for name in fallbacks if name in available), {})
+
+
+def _usable_url(url: str) -> bool:
+    return len(url) <= 400 and urlsplit(url).scheme == "https"
 
 
 async def queue_event(session: AsyncSession, event: AlertEvent, alert: Alert, asset: Asset, quote) -> None:
     event.notification_status = "routed"
-    available_links = build_asset_links(asset)
-    preferred_link = coin_link_key(getattr(alert.user, "coin_link", None))
-    if preferred_link not in available_links and asset.type != AssetType.NFT_COLLECTION.value:
-        preferred_link = "tradingview"
-    selected_links = {}
-    for name in (quote.source, preferred_link):
-        url = available_links.get(name)
-        if url and len(url) <= 400 and urlsplit(url).scheme == "https":
-            selected_links[name] = url
+    selected_links = notification_links(asset, quote.source, coin_link_keys(getattr(alert.user, "coin_links", None)))
     payload = {
         "schema_version": 1,
         "type": "alert.triggered",

@@ -9,14 +9,20 @@ COIN_LINKS = {
     "fomo": "Fomo Trade",
     "coinmarketcap": "CoinMarketCap",
 }
-DEFAULT_COIN_LINK = "dexscreener"
+DEFAULT_COIN_LINKS = ("dexscreener",)
 DEFAULT_QUIET_HOURS = (22, 7)
 MIN_TIMEZONE_OFFSET_MINUTES = -12 * 60
 MAX_TIMEZONE_OFFSET_MINUTES = 14 * 60
 
 
-def coin_link_key(value: str | None) -> str:
-    return value if value in COIN_LINKS else DEFAULT_COIN_LINK
+def coin_link_keys(value) -> list[str]:
+    selected = DEFAULT_COIN_LINKS if value is None else value
+    return [key for key in COIN_LINKS if key in selected]
+
+
+def toggle_coin_link(value, key: str) -> list[str]:
+    selected = set(coin_link_keys(value)) ^ {key}
+    return [item for item in COIN_LINKS if item in selected]
 
 
 def quiet_hours(user) -> tuple[int, int] | None:

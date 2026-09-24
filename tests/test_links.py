@@ -29,7 +29,7 @@ def test_format_links_uses_html_magic_links() -> None:
     links = format_links({"dexscreener": "https://dexscreener.com/ethereum/0xabc"})
 
     assert links == (
-        '<tg-emoji emoji-id="5917923733648973619">🦅</tg-emoji> <a href="https://dexscreener.com/ethereum/0xabc">DexScreener</a>'
+        '<tg-emoji emoji-id="5917923733648973619">🦅</tg-emoji> <a href="https://dexscreener.com/ethereum/0xabc">DEX</a>'
     )
 
 
