@@ -20,7 +20,10 @@ from app.db.repositories.limits import (
 from app.db.repositories.snapshots import create_snapshot, latest_snapshot
 from app.db.repositories.stats import get_stats
 from app.db.repositories.users import (
+    broadcast_recipient_ids,
+    count_broadcast_recipients,
     ensure_admin,
+    find_users_by_refs,
     get_user_by_id,
     get_user_by_telegram_id,
     get_user_language,
@@ -35,6 +38,8 @@ __all__ = [
     "active_alerts_for_asset",
     "active_alerts_for_user",
     "active_watched_assets",
+    "broadcast_recipient_ids",
+    "count_broadcast_recipients",
     "count_limited_alerts",
     "count_watched_assets",
     "create_alert",
@@ -42,6 +47,7 @@ __all__ = [
     "create_snapshot",
     "delete_active_alert_for_user",
     "ensure_admin",
+    "find_users_by_refs",
     "get_alert_limit",
     "get_stats",
     "get_user_by_id",

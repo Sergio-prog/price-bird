@@ -29,6 +29,7 @@ BOT_COMMANDS: tuple[CommandSpec, ...] = (
     CommandSpec("whitelist", admin_only=True),
     CommandSpec("suspend", admin_only=True),
     CommandSpec("promote", admin_only=True),
+    CommandSpec("broadcast", admin_only=True),
 )
 
 

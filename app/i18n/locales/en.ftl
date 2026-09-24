@@ -15,6 +15,7 @@ command-users = List users
 command-whitelist = Allow user by Telegram id
 command-suspend = Suspend user by Telegram id
 command-promote = Promote user to admin
+command-broadcast = Send a message to users
 
 profile-description =
     Price Bird watches token prices, CEX pairs, market caps, and NFT floor prices, then sends a Telegram alert when your rule triggers.
@@ -385,3 +386,42 @@ admin-stats =
 admin-debug-connect-trenchbook = Connect and enable Trenchbook first.
 admin-debug-no-alert = No previous alert is available to replay.
 admin-debug-queued = Queued alert #{ $alert_id } for Trenchbook.
+
+## Broadcast
+
+broadcast-audience-prompt = 📣 <b>New broadcast</b>
+
+    Who should receive it?
+button-broadcast-all = 👥 All users ({ $count })
+button-broadcast-specific = 🎯 Specific users
+button-broadcast-cancel = ✖️ Cancel
+broadcast-recipients-prompt = Send Telegram IDs or @usernames separated by spaces, commas or new lines.
+broadcast-recipients-found = 👥 Recipients found: { $count }
+broadcast-recipients-missing = ⚠️ Not found: { $refs }
+broadcast-recipients-none = None of these users have started the bot. Send other IDs or usernames.
+broadcast-content-prompt = Send the post: text, photo, video, GIF or file. Formatting and custom emoji are kept.
+broadcast-confirm =
+    📣 <b>Post preview is above</b>
+
+    👥 Recipients: <b>{ $count }</b> ({ $audience })
+    🔘 Buttons: { $buttons }
+broadcast-audience-all = all users
+broadcast-audience-specific = selected users
+broadcast-buttons-none = none
+button-broadcast-add = ➕ Add button
+button-broadcast-remove = ↩️ Remove last button
+button-broadcast-send = ✅ Send to { $count }
+broadcast-button-text-prompt = Send the button text, up to { $max } characters.
+broadcast-button-action-prompt =
+    Send a link for <b>{ $text }</b> (https://…, t.me/… or tg://…)
+    or callback data up to { $max } bytes.
+broadcast-started = 📤 Sending to { $count } users…
+broadcast-finished = 📣 Broadcast finished: delivered { $sent } of { $total }, failed { $failed }.
+broadcast-cancelled = Broadcast cancelled.
+broadcast-expired = This broadcast is no longer active.
+broadcast-no-recipients = No users to send to.
+error-broadcast-button-text = Button text must be 1–{ $max } characters.
+error-broadcast-button-url = Send a valid https://, t.me/ or tg:// link.
+error-broadcast-button-data = Callback data must be 1–{ $max } bytes.
+error-broadcast-recipient = Not a Telegram ID or @username: { $value }
+error-broadcast-recipients-empty = Send at least one Telegram ID or @username.

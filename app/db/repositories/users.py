@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -119,4 +119,35 @@ def is_admin(user: User | None) -> bool:
 
 async def list_users(session: AsyncSession, limit: int = 50) -> Sequence[User]:
     result = await session.scalars(select(User).order_by(User.created_at.desc()).limit(limit))
+    return result.all()
+
+
+async def broadcast_recipient_ids(session: AsyncSession) -> list[int]:
+    result = await session.scalars(
+        select(User.telegram_id).where(User.access_status != AccessStatus.SUSPENDED.value).order_by(User.id)
+    )
+    return list(result.all())
+
+
+async def count_broadcast_recipients(session: AsyncSession) -> int:
+    count = await session.scalar(
+        select(func.count()).select_from(User).where(User.access_status != AccessStatus.SUSPENDED.value)
+    )
+    return count or 0
+
+
+async def find_users_by_refs(
+    session: AsyncSession,
+    *,
+    telegram_ids: set[int],
+    usernames: set[str],
+) -> Sequence[User]:
+    conditions = []
+    if telegram_ids:
+        conditions.append(User.telegram_id.in_(telegram_ids))
+    if usernames:
+        conditions.append(func.lower(User.username).in_(usernames))
+    if not conditions:
+        return []
+    result = await session.scalars(select(User).where(or_(*conditions)).order_by(User.id))
     return result.all()

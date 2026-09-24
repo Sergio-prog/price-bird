@@ -15,6 +15,7 @@ command-users = Список пользователей
 command-whitelist = Разрешить доступ по Telegram id
 command-suspend = Заблокировать по Telegram id
 command-promote = Назначить админом
+command-broadcast = Отправить сообщение пользователям
 
 profile-description =
     Price Bird следит за ценами токенов, CEX-парами, капитализацией и флорами NFT — и присылает уведомление в Telegram, когда срабатывает твоё правило.
@@ -389,3 +390,42 @@ admin-stats =
 admin-debug-connect-trenchbook = Сначала подключи и включи Trenchbook.
 admin-debug-no-alert = Нет предыдущего алерта для повтора.
 admin-debug-queued = Алерт #{ $alert_id } поставлен в очередь для Trenchbook.
+
+## Broadcast
+
+broadcast-audience-prompt = 📣 <b>Новая рассылка</b>
+
+    Кому отправить?
+button-broadcast-all = 👥 Всем пользователям ({ $count })
+button-broadcast-specific = 🎯 Отдельным пользователям
+button-broadcast-cancel = ✖️ Отменить
+broadcast-recipients-prompt = Отправьте Telegram ID или @username через пробел, запятую или с новой строки.
+broadcast-recipients-found = 👥 Найдено получателей: { $count }
+broadcast-recipients-missing = ⚠️ Не найдено: { $refs }
+broadcast-recipients-none = Никто из этих пользователей не запускал бота. Отправьте другие ID или username.
+broadcast-content-prompt = Отправьте пост: текст, фото, видео, GIF или файл. Форматирование и кастомные эмодзи сохранятся.
+broadcast-confirm =
+    📣 <b>Предпросмотр поста выше</b>
+
+    👥 Получатели: <b>{ $count }</b> ({ $audience })
+    🔘 Кнопки: { $buttons }
+broadcast-audience-all = все пользователи
+broadcast-audience-specific = выбранные пользователи
+broadcast-buttons-none = нет
+button-broadcast-add = ➕ Добавить кнопку
+button-broadcast-remove = ↩️ Убрать последнюю кнопку
+button-broadcast-send = ✅ Отправить { $count }
+broadcast-button-text-prompt = Отправьте текст кнопки, до { $max } символов.
+broadcast-button-action-prompt =
+    Отправьте ссылку для <b>{ $text }</b> (https://…, t.me/… или tg://…)
+    или callback data до { $max } байт.
+broadcast-started = 📤 Отправляем { $count } пользователям…
+broadcast-finished = 📣 Рассылка завершена: доставлено { $sent } из { $total }, ошибок { $failed }.
+broadcast-cancelled = Рассылка отменена.
+broadcast-expired = Эта рассылка уже неактивна.
+broadcast-no-recipients = Некому отправлять.
+error-broadcast-button-text = Текст кнопки должен содержать 1–{ $max } символов.
+error-broadcast-button-url = Отправьте корректную ссылку https://, t.me/ или tg://.
+error-broadcast-button-data = Callback data должна содержать 1–{ $max } байт.
+error-broadcast-recipient = Это не Telegram ID и не @username: { $value }
+error-broadcast-recipients-empty = Отправьте хотя бы один Telegram ID или @username.
