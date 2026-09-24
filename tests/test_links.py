@@ -66,3 +66,16 @@ def test_nft_collections_get_no_token_links() -> None:
     links = build_asset_links(asset)
 
     assert not {"dexscreener", "gmgn", "fomo", "coinmarketcap"} & set(links)
+
+
+def test_explorer_link_uses_chain_specific_scan() -> None:
+    asset = Asset()
+    asset.chain = "robinhood"
+    asset.contract_address = "0xabc"
+
+    links = build_asset_links(asset)
+
+    assert links["explorer"] == "https://robin.etherscan.io/token/0xabc"
+    assert format_links({"explorer": links["explorer"]}, "robinhood") == (
+        '<tg-emoji emoji-id="6021610467582025589">🔍</tg-emoji> <a href="https://robin.etherscan.io/token/0xabc">Etherscan</a>'
+    )

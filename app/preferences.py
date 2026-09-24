@@ -8,6 +8,7 @@ COIN_LINKS = {
     "gmgn": "GMGN",
     "fomo": "Fomo Trade",
     "coinmarketcap": "CoinMarketCap",
+    "explorer": "Explorer",
 }
 DEFAULT_COIN_LINKS = ("dexscreener",)
 DEFAULT_QUIET_HOURS = (22, 7)

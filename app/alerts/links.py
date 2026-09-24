@@ -19,6 +19,17 @@ GMGN_CHAINS = {
     "solana": "sol",
 }
 FOMO_CHAINS = {"base", "bsc", "ethereum", "monad", "robinhood", "solana"}
+EXPLORERS = {
+    "arbitrum": ("arbiscan", "Arbiscan", "https://arbiscan.io"),
+    "avalanche": ("snowscan", "Snowscan", "https://snowscan.xyz"),
+    "base": ("basescan", "Basescan", "https://basescan.org"),
+    "bsc": ("bscscan", "BscScan", "https://bscscan.com"),
+    "ethereum": ("etherscan", "Etherscan", "https://etherscan.io"),
+    "robinhood": ("robinscan", "Etherscan", "https://robin.etherscan.io"),
+    "solana": ("solscan", "Solscan", "https://solscan.io"),
+    "sonic": ("sonicscan", "SonicScan", "https://sonicscan.org"),
+    "unichain": ("uniscan", "Uniscan", "https://uniscan.xyz"),
+}
 
 
 def build_asset_links(asset: Asset) -> dict[str, str]:
@@ -38,6 +49,8 @@ def build_asset_links(asset: Asset) -> dict[str, str]:
         if chain in FOMO_CHAINS:
             links.setdefault("fomo", f"https://fomo.family/tokens/{chain}/{address}")
         links.setdefault("coinmarketcap", f"https://coinmarketcap.com/search/?q={quote_plus(address)}")
+        if explorer := EXPLORERS.get(chain):
+            links.setdefault("explorer", f"{explorer[2]}/token/{address}")
 
     return links
 
@@ -45,6 +58,7 @@ def build_asset_links(asset: Asset) -> dict[str, str]:
 LINK_LABELS = {
     "coinmarketcap": "CMC",
     "dexscreener": "DEX",
+    "explorer": "Explorer",
     "fomo": "Fomo",
     "gmgn": "GMGN",
     "hyperliquid": "Hyperliquid",
@@ -56,10 +70,10 @@ LINK_LABELS = {
 SOURCE_LABELS = {"dexscreener": "DexScreener", "opensea": "OpenSea", "hyperliquid": "Hyperliquid"}
 
 
-def format_links(links: dict[str, str]) -> str:
+def format_links(links: dict[str, str], chain: str | None = None) -> str:
     return "  ".join(
-        with_icon(icon(label), f'<a href="{escape(url, quote=True)}">{escape(_link_label(label))}</a>')
-        for label, url in links.items()
+        with_icon(icon(_link_icon(name, chain)), f'<a href="{escape(url, quote=True)}">{escape(_link_label(name, chain))}</a>')
+        for name, url in links.items()
     )
 
 
@@ -78,5 +92,13 @@ def format_source(asset: Asset) -> str:
     return with_icon(icon(exchange if asset.provider == "ccxt" else asset.provider), label)
 
 
-def _link_label(label: str) -> str:
-    return LINK_LABELS.get(label, label.replace("_", " ").title())
+def _link_label(name: str, chain: str | None = None) -> str:
+    if name == "explorer" and (explorer := EXPLORERS.get((chain or "").lower())):
+        return explorer[1]
+    return LINK_LABELS.get(name, name.replace("_", " ").title())
+
+
+def _link_icon(name: str, chain: str | None) -> str:
+    if name == "explorer" and (explorer := EXPLORERS.get((chain or "").lower())):
+        return explorer[0]
+    return name

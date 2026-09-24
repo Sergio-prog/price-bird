@@ -56,7 +56,7 @@ def render_payload(payload: dict) -> str:
     if payload.get("note"):
         lines.append(t("notification-note", note=escape(payload["note"])))
     if links:
-        lines += ["", format_links(links)]
+        lines += ["", format_links(links, asset.get("chain"))]
     return "\n".join(lines)
 
 
